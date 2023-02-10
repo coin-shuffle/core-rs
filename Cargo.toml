@@ -11,7 +11,7 @@ all = ["serde"]
 serde = ["dep:serde", "uuid/serde", "rsa/serde"]
 
 [dependencies]
-ethers = { version = "1.0.2", features = ["rustls"] }
+ethers-core = "1.0.2"
 serde = { version = "1.0.152", optional = true }
 rsa = "0.8.1"
 
