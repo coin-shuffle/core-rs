@@ -8,11 +8,12 @@ edition = "2021"
 [features]
 default = ["all"]
 all = ["serde"]
-serde = ["dep:serde", "uuid/serde"]
+serde = ["dep:serde", "uuid/serde", "rsa/serde"]
 
 [dependencies]
 ethers = { version = "1.0.2", features = ["rustls"] }
 serde = { version = "1.0.152", optional = true }
+rsa = "0.8.1"
 
 [dependencies.uuid]
 version = "1.3.0"
