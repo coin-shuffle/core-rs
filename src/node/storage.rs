@@ -59,15 +59,12 @@ impl RoomStorage for RoomMemoryStorage {
     async fn get(&self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
         let storage = self.room_list.lock().await;
 
-        Ok(match storage.get(utxo_id) {
-            Some(room) => Some(room.clone()),
-            None => None,
-        })
+        Ok(storage.get(utxo_id).map(|room| room.clone()))
     }
 
     async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
         let mut storage = self.room_list.lock().await;
 
-        Ok(storage.remove(&utxo_id))
+        Ok(storage.remove(utxo_id))
     }
 }
