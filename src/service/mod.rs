@@ -1,37 +1,67 @@
-use ethers_core::rand::seq::SliceRandom;
-use rsa::RsaPublicKey;
+pub mod storage;
+pub mod types;
+pub mod waiter;
 
-use crate::types::Room;
+use ethers_core::types::{Address, U256};
 
-/// provides shuffle operations for the of the shuffling process in
-/// centralized provider.
-pub trait Service {
-    /// shuffle participants inside a room
-    fn shuffle_room(mut room: Room) -> Room {
-        room.participants.shuffle(&mut rand::thread_rng());
-        room
+use self::{
+    storage::{participants, queues, rooms},
+    types::{participant::Participant, room::Room},
+};
+
+pub struct Service<S, W>
+where
+    S: storage::Storage,
+    W: waiter::Waiter,
+{
+    storage: S,
+    waiter: W,
+}
+
+impl<S, W> Service<S, W>
+where
+    S: storage::Storage,
+    W: waiter::Waiter,
+{
+    pub fn new(storage: S, waiter: W) -> Self {
+        Self { storage, waiter }
     }
 
-    /// return a list of keys needed to decrypt inputs for current participant
-    fn participant_keys<'a>(
-        room: &'a Room,
-        participant: &uuid::Uuid,
-    ) -> Option<Vec<&'a RsaPublicKey>> {
-        // get participant position in the room
-        let participant = room
-            .participants
-            .iter()
-            .position(|p| participant == &p.id)?;
-
-        // get the keys of the participants that are after the given participant
-        let keys = room
-            .participants
-            .iter()
-            .map(|p| &p.rsa_pubkey)
-            .rev()
-            .take(participant)
-            .collect::<Vec<&'a RsaPublicKey>>();
-
-        Some(keys)
+    pub async fn add_participant(
+        &self,
+        token: &Address,
+        amount: &U256,
+        participant: &Participant,
+    ) -> Result<(), Error<W::Error, <S as queues::Storage>::Error>> {
+        self.waiter
+            .add_to_queue(token, amount, &participant.utxo_id)
+            .await
+            .map_err(Error::Waiter)
     }
+
+    pub async fn start_shuffle(
+        &self,
+        token: &Address,
+        amount: &U256,
+    ) -> Result<(), Error<W::Error, <S as rooms::Storage>::Error>> {
+        let rooms = self
+            .waiter
+            .organize(token, amount)
+            .await
+            .map_err(Error::Waiter)?;
+
+        Ok(())
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error<WE, SE>
+where
+    WE: std::error::Error,
+    SE: std::error::Error,
+{
+    #[error("Waiter error: {0}")]
+    Waiter(WE),
+    #[error("Storage error: {0}")]
+    Storage(SE),
 }
