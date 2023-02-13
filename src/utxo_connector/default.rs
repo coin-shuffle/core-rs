@@ -1,6 +1,6 @@
 use crate::utxo_connector::{types::Utxo, Connector};
 use async_trait::async_trait;
-use ethers_core::{k256::{ecdsa::SigningKey}, types::U256};
+use ethers_core::{k256::ecdsa::SigningKey, types::U256};
 
 pub struct DefaultConnector {
     private_key: SigningKey,
