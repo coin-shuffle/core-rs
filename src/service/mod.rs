@@ -94,8 +94,6 @@ where
                 .ok_or(StartShuffleError::ParticipantNotFound)?
                 .rsa_pubkey;
 
-            dbg!(&keys);
-
             keys.push(key);
 
             pairs.insert(*participant, keys.clone());
