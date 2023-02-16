@@ -1,0 +1,134 @@
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
+
+use async_trait::async_trait;
+use ethers_core::types::{Address, U256};
+use tokio::sync::Mutex;
+
+use crate::service::types::{Participant, Room};
+
+use super::{
+    participants::{self, UpdateError},
+    queues, rooms,
+};
+
+#[derive(Clone, Default)]
+pub struct MapStorage {
+    queues: Arc<Mutex<HashMap<(Address, U256), Vec<U256>>>>,
+    rooms: Arc<Mutex<HashMap<uuid::Uuid, Room>>>,
+    participants: Arc<Mutex<HashMap<U256, Participant>>>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum InternalError {}
+
+#[async_trait]
+impl rooms::Storage for MapStorage {
+    type InternalError = InternalError;
+
+    async fn get_room(&self, id: &uuid::Uuid) -> Result<Option<Room>, Self::InternalError> {
+        let rooms = self.rooms.lock().await;
+
+        Ok(rooms.get(id).map(|room| room.clone()))
+    }
+
+    async fn insert_room(
+        &self,
+        room: &Room,
+    ) -> Result<(), rooms::InsertError<Self::InternalError>> {
+        let mut rooms = self.rooms.lock().await;
+
+        rooms.insert(room.id.clone(), room.clone());
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl participants::Storage for MapStorage {
+    type InternalError = InternalError;
+
+    async fn insert_participants(
+        &self,
+        participants: Vec<Participant>,
+    ) -> Result<(), participants::InsertError<Self::InternalError>> {
+        let mut participants_storage = self.participants.lock().await;
+
+        for participant in participants {
+            participants_storage.insert(participant.utxo_id, participant);
+        }
+
+        Ok(())
+    }
+
+    async fn update_participant_room(
+        &self,
+        participant: &U256,
+        room_id: &uuid::Uuid,
+    ) -> Result<(), participants::UpdateError<Self::InternalError>> {
+        let mut participants_storage = self.participants.lock().await;
+
+        let participant = participants_storage
+            .get_mut(participant)
+            .ok_or(UpdateError::NotFound(participant.clone()))?;
+
+        participant.room_id = Some(room_id.clone());
+
+        Ok(())
+    }
+
+    async fn get_participant(&self, id: &U256) -> Result<Option<Participant>, Self::InternalError> {
+        let participants = self.participants.lock().await;
+
+        Ok(participants.get(id).map(|p| p.clone()))
+    }
+}
+
+#[async_trait]
+impl queues::Storage for MapStorage {
+    type InternalError = InternalError;
+
+    async fn push_to_queue(
+        &self,
+        token: &Address,
+        amount: &U256,
+        participant_id: &U256,
+    ) -> Result<(), Self::InternalError> {
+        let mut queues_storage = self.queues.lock().await;
+
+        let queue = match queues_storage.entry((*token, *amount)) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert(Vec::new()),
+        };
+
+        queue.push(participant_id.clone());
+
+        Ok(())
+    }
+
+    async fn pop_from_queue(
+        &self,
+        token: &Address,
+        amount: &U256,
+        number: usize,
+    ) -> Result<Vec<U256>, queues::Error<Self::InternalError>> {
+        let mut queues_storage = self.queues.lock().await;
+
+        let queue = queues_storage
+            .get_mut(&(*token, *amount))
+            .ok_or(queues::Error::QueueNotFound)?;
+
+        let split_at = queue.len().saturating_sub(number);
+
+        let tail = queue.split_off(split_at);
+
+        Ok(tail)
+    }
+}
+
+#[async_trait]
+impl super::Storage for MapStorage {
+    type InternalError = InternalError;
+}
