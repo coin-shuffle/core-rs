@@ -45,7 +45,7 @@ where
         self.waiter
             .add_to_queue(token, amount, &participant.utxo_id)
             .await
-            .map_err(AddParticipantError::Waiter)?;
+            .map_err(AddParticipantError::Queue)?;
 
         Ok(())
     }
@@ -63,20 +63,20 @@ where
     }
 
     /// Start shuffling in the room. Return pairs of participant id and array of
-    /// RSA public keys needed to encrypt messages.
+    /// RSA public keys needed to encrypt messages for the participant.
     pub async fn start_shuffle(
         &self,
         room_id: &uuid::Uuid,
     ) -> Result<
         Vec<(U256, Vec<RsaPublicKey>)>,
-        ShuffleRoundError<<S as storage::Storage>::InternalError>,
+        StartShuffleError<<S as storage::Storage>::InternalError>,
     > {
         let room = self
             .storage
             .get_room(room_id)
             .await
-            .map_err(ShuffleRoundError::RoomStorage)?
-            .ok_or(ShuffleRoundError::RoomNotFound)?;
+            .map_err(StartShuffleError::RoomStorage)?
+            .ok_or(StartShuffleError::RoomNotFound)?;
 
         let participants_number = room.participants.len();
 
@@ -88,8 +88,8 @@ where
                 .storage
                 .get_participant(participant)
                 .await
-                .map_err(ShuffleRoundError::ParticipantStorage)?
-                .ok_or(ShuffleRoundError::ParticipantNotFound)?
+                .map_err(StartShuffleError::ParticipantStorage)?
+                .ok_or(StartShuffleError::ParticipantNotFound)?
                 .rsa_pubkey;
 
             keys.push(key);
@@ -110,7 +110,7 @@ where
     #[error("failed to insert participant: {0}")]
     InsertParticipant(#[from] participants::InsertError<DE>),
     #[error("failed to add paritipant to queue: {0}")]
-    Waiter(WE),
+    Queue(WE),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -119,11 +119,11 @@ where
     WE: std::error::Error,
 {
     #[error("failed to organize rooms: {0}")]
-    Waiter(#[from] WE),
+    Organize(#[from] WE),
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ShuffleRoundError<SE>
+pub enum StartShuffleError<SE>
 where
     SE: std::error::Error,
 {
