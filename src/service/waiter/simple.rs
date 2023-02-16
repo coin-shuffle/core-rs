@@ -146,13 +146,7 @@ mod tests {
 
         let rooms = waiter.organize(&token, &amount).await.unwrap();
 
-        for room_id in rooms {
-            let room = storage
-                .get_room(&room_id)
-                .await
-                .unwrap()
-                .expect("should create rooms in storage");
-
+        for room in rooms {
             assert_eq!(
                 room.participants.len(),
                 ROOM_SIZE,
