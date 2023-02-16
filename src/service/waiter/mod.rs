@@ -1,21 +1,25 @@
-use ethers_core::types::{Address, U256};
-
-use super::types::{Participant, Room};
-
 pub mod simple;
 
-/// `Waiter` organizes the waited participants into rooms
+use ethers_core::types::{Address, U256};
+
+/// `Waiter` a generic trait for something that will organize participants into rooms
+/// using some algorithm
 #[async_trait::async_trait]
 pub trait Waiter {
-    type Error: std::error::Error;
+    type InternalError: std::error::Error;
 
-    /// Add participant to queue that will be organized later
+    /// Add participant to queue that will be organized into rooms later
     async fn add_to_queue(
         &self,
         token: &Address,
         amount: &U256,
         participant: &U256,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<(), Self::InternalError>;
 
-    async fn organize(&self, token: &Address, amount: &U256) -> Result<Vec<Room>, Self::Error>;
+    /// Organize participants inside queue into rooms and return it's IDs.
+    async fn organize(
+        &self,
+        token: &Address,
+        amount: &U256,
+    ) -> Result<Vec<uuid::Uuid>, Self::InternalError>;
 }
