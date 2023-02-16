@@ -55,13 +55,13 @@ where
                 return Ok(rooms);
             }
 
-            let room = Room::new(token.clone(), amount.clone(), participants);
+            let room = Room::new(*token, *amount, participants);
 
             self.storage.insert_room(&room).await?;
 
             for participant in &room.participants {
                 self.storage
-                    .update_participant_room(&participant, &room.id)
+                    .update_participant_room(participant, &room.id)
                     .await?;
             }
 

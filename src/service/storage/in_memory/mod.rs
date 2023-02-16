@@ -14,9 +14,11 @@ use super::{
     queues, rooms,
 };
 
+pub type QueueKey = (Address, U256);
+
 #[derive(Clone, Default)]
 pub struct MapStorage {
-    queues: Arc<Mutex<HashMap<(Address, U256), Vec<U256>>>>,
+    queues: Arc<Mutex<HashMap<QueueKey, Vec<U256>>>>,
     rooms: Arc<Mutex<HashMap<uuid::Uuid, Room>>>,
     participants: Arc<Mutex<HashMap<U256, Participant>>>,
 }
@@ -31,7 +33,7 @@ impl rooms::Storage for MapStorage {
     async fn get_room(&self, id: &uuid::Uuid) -> Result<Option<Room>, Self::InternalError> {
         let rooms = self.rooms.lock().await;
 
-        Ok(rooms.get(id).map(|room| room.clone()))
+        Ok(rooms.get(id).cloned())
     }
 
     async fn insert_room(
@@ -40,7 +42,7 @@ impl rooms::Storage for MapStorage {
     ) -> Result<(), rooms::InsertError<Self::InternalError>> {
         let mut rooms = self.rooms.lock().await;
 
-        rooms.insert(room.id.clone(), room.clone());
+        rooms.insert(room.id, room.clone());
 
         Ok(())
     }
@@ -72,9 +74,9 @@ impl participants::Storage for MapStorage {
 
         let participant = participants_storage
             .get_mut(participant)
-            .ok_or(UpdateError::NotFound(participant.clone()))?;
+            .ok_or(UpdateError::NotFound(*participant))?;
 
-        participant.room_id = Some(room_id.clone());
+        participant.room_id = Some(*room_id);
 
         Ok(())
     }
@@ -82,7 +84,7 @@ impl participants::Storage for MapStorage {
     async fn get_participant(&self, id: &U256) -> Result<Option<Participant>, Self::InternalError> {
         let participants = self.participants.lock().await;
 
-        Ok(participants.get(id).map(|p| p.clone()))
+        Ok(participants.get(id).cloned())
     }
 }
 
@@ -103,7 +105,7 @@ impl queues::Storage for MapStorage {
             Entry::Vacant(v) => v.insert(Vec::new()),
         };
 
-        queue.push(participant_id.clone());
+        queue.push(*participant_id);
 
         Ok(())
     }

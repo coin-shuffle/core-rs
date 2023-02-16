@@ -86,7 +86,7 @@ where
         for participant in room.participants.iter().rev() {
             let key = self
                 .storage
-                .get_participant(&participant)
+                .get_participant(participant)
                 .await
                 .map_err(ShuffleRoundError::ParticipantStorage)?
                 .ok_or(ShuffleRoundError::ParticipantNotFound)?
@@ -94,7 +94,7 @@ where
 
             keys.push(key);
 
-            result.push((participant.clone(), keys.clone()))
+            result.push((*participant, keys.clone()))
         }
 
         Ok(result)
