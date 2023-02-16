@@ -4,6 +4,8 @@ mod tests;
 pub mod types;
 pub mod waiter;
 
+use std::collections::HashMap;
+
 use ethers_core::types::{Address, U256};
 use rsa::RsaPublicKey;
 
@@ -68,7 +70,7 @@ where
         &self,
         room_id: &uuid::Uuid,
     ) -> Result<
-        Vec<(U256, Vec<RsaPublicKey>)>,
+        HashMap<U256, Vec<RsaPublicKey>>,
         StartShuffleError<<S as storage::Storage>::InternalError>,
     > {
         let room = self
@@ -80,7 +82,7 @@ where
 
         let participants_number = room.participants.len();
 
-        let mut result = Vec::with_capacity(participants_number);
+        let mut pairs = HashMap::with_capacity(participants_number);
         let mut keys = Vec::with_capacity(participants_number);
 
         for participant in room.participants.iter().rev() {
@@ -92,12 +94,14 @@ where
                 .ok_or(StartShuffleError::ParticipantNotFound)?
                 .rsa_pubkey;
 
+            dbg!(&keys);
+
             keys.push(key);
 
-            result.push((*participant, keys.clone()))
+            pairs.insert(*participant, keys.clone());
         }
 
-        Ok(result)
+        Ok(pairs)
     }
 }
 
