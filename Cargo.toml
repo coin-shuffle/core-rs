@@ -14,7 +14,7 @@ serde = ["dep:serde", "uuid/serde", "rsa/serde"]
 ethers-core = "1.0.2"
 serde = { version = "1.0.152", optional = true }
 rsa = "0.8.1"
-rand = "0.8.5"
+rand = { version = "0.8.5", features = ["getrandom"] }
 async-trait = "0.1.64"
 anyhow = "1"
 thiserror = "1"
@@ -26,3 +26,6 @@ features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
 ]
+
+[dev-dependencies]
+tokio = { version = "1.25", features = ["test-util", "macros"] }
