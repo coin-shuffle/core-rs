@@ -9,6 +9,8 @@ pub struct Room {
     pub current_round: u64,
 
     /// List of all UTXO's that are participating in the room.
+    /// Order in this vector represents the order which user participating
+    /// in shuffle round.
     pub participants: Vec<U256>,
 }
 
