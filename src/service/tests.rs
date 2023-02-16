@@ -79,19 +79,13 @@ mod start_shuffle {
                 .unwrap();
         }
 
-        let room_ids = service.create_rooms(&token, &amount).await.unwrap();
+        let rooms = service.create_rooms(&token, &amount).await.unwrap();
 
-        assert_eq!(
-            room_ids.len(),
-            1,
-            "with that number, should be only one room"
-        );
+        assert_eq!(rooms.len(), 1, "with that number, should be only one room");
 
-        let room_id = room_ids[0];
+        let room = rooms[0];
 
-        let room = storage.get_room(&room_id).await.unwrap().unwrap();
-
-        let pairs = service.start_shuffle(&room_id).await.unwrap();
+        let pairs = service.start_shuffle(&room.id).await.unwrap();
 
         for (participant_id, keys) in pairs.into_iter() {
             let participant_position = room

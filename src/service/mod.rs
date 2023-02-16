@@ -58,7 +58,7 @@ where
         &self,
         token: &Address,
         amount: &U256,
-    ) -> Result<Vec<uuid::Uuid>, CreateRoomsError<W::InternalError>> {
+    ) -> Result<Vec<Room>, CreateRoomsError<W::InternalError>> {
         let rooms = self.waiter.organize(token, amount).await?;
 
         Ok(rooms)

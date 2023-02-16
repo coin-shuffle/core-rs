@@ -40,7 +40,7 @@ where
         &self,
         token: &Address,
         amount: &U256,
-    ) -> Result<Vec<uuid::Uuid>, Self::InternalError> {
+    ) -> Result<Vec<Room>, Self::InternalError> {
         let mut rooms = Vec::new();
 
         // TODO: remake it to for loop
@@ -65,7 +65,7 @@ where
                     .await?;
             }
 
-            rooms.push(room.id);
+            rooms.push(room);
         }
     }
 }

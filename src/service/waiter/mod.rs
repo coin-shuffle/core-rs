@@ -2,6 +2,8 @@ pub mod simple;
 
 use ethers_core::types::{Address, U256};
 
+use super::types::Room;
+
 /// `Waiter` a generic trait for something that will organize participants into rooms
 /// using some algorithm
 #[async_trait::async_trait]
@@ -21,5 +23,5 @@ pub trait Waiter {
         &self,
         token: &Address,
         amount: &U256,
-    ) -> Result<Vec<uuid::Uuid>, Self::InternalError>;
+    ) -> Result<Vec<Room>, Self::InternalError>;
 }
