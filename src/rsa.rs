@@ -115,7 +115,35 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
         self.nonce = dest.to_vec().clone()
     }
 
-    fn try_fill_bytes(&mut self, _: &mut [u8]) -> core::result::Result<(), rand_core::Error> {
+    fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {
         unimplemented!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::rsa::{decode_by_chanks, encode_by_chanks, Noncer};
+    use ethers_core::k256::elliptic_curve::rand_core::{self, CryptoRng, CryptoRngCore, RngCore};
+    use rsa::{errors::Error as RSAError, Oaep, PublicKey, RsaPrivateKey, RsaPublicKey};
+
+    fn happy_path() {
+        let bits = 2048;
+
+        let mut rng = Noncer::new(rand::thread_rng(), Vec::new());
+
+        let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+        let pub_key = RsaPublicKey::from(&priv_key);
+
+        let encode_message = "hello world";
+
+        let encode_result =
+            encode_by_chanks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
+        let decode_result = decode_by_chanks(encode_result.encoded_msg, priv_key).unwrap();
+
+        assert_eq!(
+            decode_result,
+            encode_message.as_bytes(),
+            "source message isn't eq to the result message"
+        )
     }
 }
