@@ -4,8 +4,6 @@ mod tests;
 pub mod types;
 pub mod waiter;
 
-use std::collections::HashMap;
-
 use ethers_core::types::{Address, U256};
 use rsa::RsaPublicKey;
 
@@ -64,36 +62,34 @@ where
         Ok(rooms)
     }
 
-    /// Start shuffling in the room. Return pairs of participant id and array of
-    /// RSA public keys needed to encrypt messages for the participant.
-    pub async fn start_shuffle(
+    /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
+    pub async fn participant_keys(
         &self,
         room_id: &uuid::Uuid,
-    ) -> Result<
-        HashMap<U256, Vec<RsaPublicKey>>,
-        StartShuffleError<<S as storage::Storage>::InternalError>,
-    > {
+        participant_id: &U256,
+    ) -> Result<Vec<RsaPublicKey>, ParticipantKeysError<<S as storage::Storage>::InternalError>>
+    {
         let room = self.get_room(room_id).await?;
 
-        let participants_number = room.participants.len();
+        let position = room
+            .participants
+            .iter()
+            .position(|p| p == participant_id)
+            .ok_or(ParticipantKeysError::ParticipantNotFound)?;
 
-        let mut pairs = HashMap::with_capacity(participants_number);
-        let mut keys = Vec::with_capacity(participants_number);
+        let mut keys = Vec::with_capacity(room.participants.len() - position);
 
-        for participant in room.participants.iter().rev() {
-            let key = self.get_participant(participant).await?.rsa_pubkey;
+        for participant_id in room.participants.iter().skip(position) {
+            let participant = self.get_participant(participant_id).await?;
 
-            keys.push(key);
-
-            self.storage
-                .update_participant_round(participant, ShuffleRound::Start(keys.clone()))
-                .await
-                .map_err(StartShuffleError::UpdateParticipantRound)?;
-
-            pairs.insert(*participant, keys.clone());
+            keys.push(participant.rsa_pubkey.clone());
         }
 
-        Ok(pairs)
+        self.storage
+            .update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
+            .await?;
+
+        Ok(keys)
     }
 
     /// Return outputs that given participant should decrypt.
@@ -195,12 +191,14 @@ where
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum StartShuffleError<SE>
+pub enum ParticipantKeysError<SE>
 where
     SE: std::error::Error,
 {
     #[error("failed to get room: {0}")]
     RoomStorage(#[from] GetRoomError<SE>),
+    #[error("no participant with given id in the room")]
+    ParticipantNotFound,
     #[error("failed to get participant: {0}")]
     GetParticipant(#[from] GetParticipantError<SE>),
     #[error("failed to update participant round: {0}")]

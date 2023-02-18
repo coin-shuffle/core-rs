@@ -1,3 +1,9 @@
+use crate::service::{
+    storage::in_memory::MapStorage, types::Participant, waiter::simple::SimpleWaiter, Service,
+};
+use ethers_core::types::{Address, U256};
+use rsa::pkcs8::DecodePublicKey;
+
 const PARTICIPANTS_NUMBER: usize = 4;
 
 /// Public keys for the various of scenarios in tests.
@@ -36,7 +42,6 @@ kxfPxATu7oTrNJmGcwIDAQAB
 "#,
 ];
 
-use rsa::pkcs8::DecodePublicKey;
 lazy_static::lazy_static! {
     /// Public keys for the various of scenarios in tests.
     static ref RSA_PUBLIC_KEYS: Vec<rsa::RsaPublicKey> = RSA_RAW_PUBLIC_KEYS
@@ -45,59 +50,45 @@ lazy_static::lazy_static! {
             .collect();
 }
 
-mod start_shuffle {
-    use ethers_core::types::{Address, U256};
+/// For 5 participants in the room, return keys that are needed for participants
+/// to encode and decode outputs
+#[tokio::test]
+async fn happy_path() {
+    let token: Address = Address::default();
+    let amount: U256 = U256::from(5);
+    let room_size = PARTICIPANTS_NUMBER;
 
-    use super::{PARTICIPANTS_NUMBER, RSA_PUBLIC_KEYS};
-    use crate::service::{
-        storage::in_memory::MapStorage, types::Participant, waiter::simple::SimpleWaiter, Service,
-    };
+    let storage = MapStorage::default();
 
-    /// For 5 participants in the room, return keys that are needed for participants
-    /// to encode and decode outputs
-    #[tokio::test]
-    async fn happy_path() {
-        let token: Address = Address::default();
-        let amount: U256 = U256::from(5);
-        let room_size = PARTICIPANTS_NUMBER;
+    let waiter = SimpleWaiter::new(room_size, storage.clone());
 
-        let storage = MapStorage::default();
+    let service = Service::new(storage.clone(), waiter);
 
-        let waiter = SimpleWaiter::new(room_size, storage.clone());
+    for i in 0..room_size {
+        let participant = Participant::new(U256::from(i), RSA_PUBLIC_KEYS[i].clone());
 
-        let service = Service::new(storage.clone(), waiter);
+        service
+            .add_participant(&token, &amount, &participant)
+            .await
+            .unwrap();
+    }
 
-        for i in 0..room_size {
-            let participant = Participant::new(U256::from(i), RSA_PUBLIC_KEYS[i].clone());
+    let rooms = service.create_rooms(&token, &amount).await.unwrap();
 
-            service
-                .add_participant(&token, &amount, &participant)
-                .await
-                .unwrap();
-        }
+    assert_eq!(rooms.len(), 1, "should be only one room");
 
-        let rooms = service.create_rooms(&token, &amount).await.unwrap();
+    let room = &rooms[0];
 
-        assert_eq!(rooms.len(), 1, "with that number, should be only one room");
+    for (position, participant) in room.participants.iter().enumerate() {
+        let keys = service
+            .participant_keys(&room.id, participant)
+            .await
+            .unwrap();
 
-        let room = &rooms[0];
-
-        let pairs = service.start_shuffle(&room.id).await.unwrap();
-
-        for (participant_id, keys) in pairs.into_iter() {
-            let participant_position = room
-                .participants
-                .iter()
-                .position(|p| *p == participant_id)
-                .unwrap();
-
-            assert_eq!(
-                room_size - participant_position,
-                keys.len(),
-                r#"number of keys of the participant should be equal
-                   to the participant's position in shuffle, participant_id={:?}"#,
-                participant_id
-            );
-        }
+        assert_eq!(
+            keys.len(),
+            room.participants.len() - position,
+            "invalid number of keys",
+        );
     }
 }
