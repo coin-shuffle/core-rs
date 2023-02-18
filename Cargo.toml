@@ -16,7 +16,6 @@ serde = { version = "1.0.152", optional = true }
 rsa = "0.8.1"
 rand = { version = "0.8.5", features = ["getrandom"] }
 async-trait = "0.1.64"
-anyhow = "1"
 thiserror = "1"
 tokio = { version = "1.25", features = ["sync"] }
 
