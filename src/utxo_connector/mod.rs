@@ -1,9 +1,10 @@
 use async_trait::async_trait;
-use ethers_core::types::U256;
+use ethers::core::types::U256;
 use types::Utxo;
 
 pub mod default;
 pub mod types;
+pub mod utxo_contract;
 
 #[async_trait]
 pub trait Connector {

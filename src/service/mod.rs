@@ -1,4 +1,4 @@
-use ethers_core::rand::seq::SliceRandom;
+use ethers::core::rand::seq::SliceRandom;
 use rsa::RsaPublicKey;
 
 use crate::types::Room;

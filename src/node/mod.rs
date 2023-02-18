@@ -1,6 +1,6 @@
 use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
-use ethers_core::types::U256;
-use ethers_signers::{LocalWallet, Signer, WalletError};
+use ethers::core::types::U256;
+use ethers::signers::{LocalWallet, Signer, WalletError};
 
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa, utxo_connector::Connector};

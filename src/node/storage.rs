@@ -1,4 +1,4 @@
-use ethers_core::types::U256;
+use ethers::core::types::U256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 

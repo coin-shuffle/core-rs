@@ -1,5 +1,5 @@
-use ethers_core::k256::elliptic_curve::rand_core::{self, CryptoRng, CryptoRngCore, RngCore};
-use ethers_core::k256::sha2::Sha256;
+use ethers::core::k256::elliptic_curve::rand_core::{self, CryptoRng, CryptoRngCore, RngCore};
+use ethers::core::k256::sha2::Sha256;
 pub use rsa::{errors::Error as RSAError, Oaep, PublicKey, RsaPrivateKey, RsaPublicKey};
 
 const ENCRYPTING_CHUNK_SIZE2048PUB_KEY: usize = 126;
