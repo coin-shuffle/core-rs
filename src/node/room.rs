@@ -9,11 +9,11 @@ use crate::utxo_connector::types::Utxo;
 pub struct Room {
     pub utxo: Utxo,
     pub output: Vec<u8>,
-    pub serial_number: usize,
     pub public_keys: Vec<RsaPublicKey>,
     pub status: ShuffleStatus,
     pub rsa_private_key: RsaPrivateKey,
     pub ecdsa_private_key: LocalWallet,
+    pub participants_number: usize,
 }
 
 impl Room {
@@ -30,7 +30,7 @@ impl Room {
             rsa_private_key,
             ecdsa_private_key,
             public_keys: Vec::new(),
-            serial_number: usize::default(),
+            participants_number: usize::default(),
         }
     }
 }

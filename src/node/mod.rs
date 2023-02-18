@@ -1,6 +1,6 @@
 use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use ethers_core::types::U256;
-use ethers_signers::LocalWallet;
+use ethers_signers::{LocalWallet, Signer, WalletError};
 
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa, utxo_connector::Connector};
@@ -32,6 +32,12 @@ where
     FailedToDecodeByChanks(RSAError),
     #[error("failed to encode by chanks: {0}")]
     FailedToEncodeByChanks(RSAError),
+    #[error("incorrect signing data: incorrect outputs size")]
+    IncorrectOutputsSize,
+    #[error("incorrect signing data: self outputs is absent")]
+    SelfOutputsIsAbsent,
+    #[error("failed to sing the message: {0}")]
+    FailedToSignMessage(#[from] WalletError),
 }
 
 #[derive(Debug, Clone)]
@@ -85,7 +91,6 @@ where
     pub async fn start_shuffle(
         &mut self,
         public_keys: Vec<RsaPublicKey>,
-        serial_number: usize,
         utxo_id: U256,
     ) -> Result<(), Error<C::Error, R::Error>> {
         if let Some(mut room_inner) = self
@@ -95,7 +100,6 @@ where
             .map_err(Error::FailedToGetRoom)?
         {
             room_inner.public_keys = public_keys;
-            room_inner.serial_number = serial_number;
 
             self.room_storage
                 .update(&room_inner)
@@ -117,12 +121,18 @@ where
 
         let mut result_outputs = Outputs::default();
 
-        let room = self
+        let mut room = self
             .room_storage
             .get(&utxo_id)
             .await
             .map_err(Error::FailedToGetRoom)?
             .ok_or(Error::RoomDoesntExist(utxo_id))?;
+
+        room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
+        self.room_storage
+            .update(&room.clone())
+            .await
+            .map_err(Error::FailedToUpdateRoom)?;
 
         for encoded_output in encoded_outputs {
             result_outputs.push(
@@ -145,5 +155,38 @@ where
         result_outputs.push(encoded_self_output);
 
         Ok(result_outputs)
+    }
+
+    pub async fn sign_tx(
+        &self,
+        utxo_id: U256,
+        outputs: Outputs,
+    ) -> Result<Vec<u8>, Error<C::Error, R::Error>> {
+        let room = self
+            .room_storage
+            .get(&utxo_id)
+            .await
+            .map_err(Error::FailedToGetRoom)?
+            .ok_or(Error::RoomDoesntExist(utxo_id))?;
+
+        if room.participants_number != outputs.len() {
+            Err(Error::IncorrectOutputsSize)?
+        }
+
+        if outputs.iter().position(|o| o == &room.output).is_none() {
+            Err(Error::IncorrectOutputsSize)?;
+        };
+
+        let mut sign_message = room.utxo.id.to_string().as_bytes().to_vec();
+
+        for mut output in outputs.clone() {
+            sign_message.append(&mut output)
+        }
+
+        Ok(room
+            .ecdsa_private_key
+            .sign_message(sign_message)
+            .await?
+            .to_vec())
     }
 }
