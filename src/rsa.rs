@@ -122,16 +122,15 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rsa::{decode_by_chanks, encode_by_chanks, Noncer};
-    use ethers_core::k256::elliptic_curve::rand_core::{self, CryptoRng, CryptoRngCore, RngCore};
-    use rsa::{errors::Error as RSAError, Oaep, PublicKey, RsaPrivateKey, RsaPublicKey};
+    use crate::rsa::{decode_by_chanks, encode_by_chanks};
+    use rsa::{RsaPrivateKey, RsaPublicKey};
 
-    fn happy_path() {
+    #[tokio::test]
+    async fn happy_path() {
         let bits = 2048;
 
-        let mut rng = Noncer::new(rand::thread_rng(), Vec::new());
-
-        let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+        let priv_key =
+            RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
         let pub_key = RsaPublicKey::from(&priv_key);
 
         let encode_message = "hello world";
@@ -145,5 +144,78 @@ mod tests {
             encode_message.as_bytes(),
             "source message isn't eq to the result message"
         )
+    }
+
+    #[tokio::test]
+    async fn custom_nonce() {
+        let bits = 2048;
+
+        let priv_key =
+            RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
+        let pub_key = RsaPublicKey::from(&priv_key);
+
+        let encode_message = "hello world";
+
+        let encode_result1 = encode_by_chanks(
+            encode_message.as_bytes().to_vec(),
+            pub_key.clone(),
+            Vec::new(),
+        )
+        .unwrap();
+
+        let encode_result2 = encode_by_chanks(
+            encode_message.as_bytes().to_vec(),
+            pub_key.clone(),
+            encode_result1.nonce.clone(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            encode_result1.encoded_msg.clone(),
+            encode_result2.encoded_msg.clone(),
+            "encoded messages with the same nonce aren't the same"
+        );
+
+        assert_eq!(
+            encode_result1.nonce.clone(),
+            encode_result2.nonce.clone(),
+            "nonces are different"
+        );
+    }
+
+    #[tokio::test]
+    async fn with_different_nonce() {
+        let bits = 2048;
+
+        let priv_key =
+            RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
+        let pub_key = RsaPublicKey::from(&priv_key);
+
+        let encode_message = "hello world";
+
+        let encode_result1 = encode_by_chanks(
+            encode_message.as_bytes().to_vec(),
+            pub_key.clone(),
+            Vec::new(),
+        )
+        .unwrap();
+
+        let encode_result2 = encode_by_chanks(
+            encode_message.as_bytes().to_vec(),
+            pub_key.clone(),
+            Vec::new(),
+        )
+        .unwrap();
+
+        assert_ne!(
+            encode_result1.encoded_msg,
+            encode_result2.encoded_msg.clone(),
+            "encoded messages without the same nonces are the same"
+        );
+
+        assert_ne!(
+            encode_result1.nonce, encode_result2.nonce,
+            "nonces are the same"
+        );
     }
 }
