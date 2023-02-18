@@ -1,10 +1,9 @@
+use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use ethers_core::types::U256;
 use ethers_signers::LocalWallet;
-use rsa::{RsaPrivateKey, RsaPublicKey};
 
-use crate::{node::storage::RoomStorage, utxo_connector::Connector};
-
-use self::room::Room;
+use self::{room::Room, storage::Outputs};
+use crate::{node::storage::RoomStorage, rsa, utxo_connector::Connector};
 
 mod room;
 mod storage;
@@ -27,11 +26,22 @@ where
     FailedToInsertRoom(R),
     #[error("failed to update room: {0}")]
     FailedToUpdateRoom(R),
+    #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
+    RoomDoesntExist(U256),
+    #[error("failed to decode by chanks: {0}")]
+    FailedToDecodeByChanks(RSAError),
+    #[error("failed to encode by chanks: {0}")]
+    FailedToEncodeByChanks(RSAError),
+}
+
+#[derive(Debug, Clone)]
+pub struct ShuffleRoundResult {
+    pub outputs: Outputs,
+    pub nonce: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Node<R: RoomStorage, C: Connector> {
-    shuffle_service_addr: String,
     room_storage: R,
     utxo_conn: C,
 }
@@ -41,9 +51,8 @@ where
     R: RoomStorage,
     C: Connector,
 {
-    pub fn new(shuffle_service_addr: String, room_storage: R, utxo_conn: C) -> Self {
+    pub fn new(room_storage: R, utxo_conn: C) -> Self {
         Self {
-            shuffle_service_addr,
             room_storage,
             utxo_conn,
         }
@@ -52,7 +61,7 @@ where
     pub async fn init_room(
         &mut self,
         utxo_id: U256,
-        output: String,
+        output: Vec<u8>,
         rsa_private_key: RsaPrivateKey,
         ecdsa_private_key: LocalWallet,
     ) -> Result<Room, Error<C::Error, R::Error>> {
@@ -95,5 +104,46 @@ where
         }
 
         Ok(())
+    }
+
+    pub async fn shuffle_round(
+        &mut self,
+        encoded_outputs: Outputs,
+        utxo_id: U256,
+    ) -> Result<Outputs, Error<C::Error, R::Error>> {
+        //
+        // todo validate encoded outputs size
+        //
+
+        let mut result_outputs = Outputs::default();
+
+        let room = self
+            .room_storage
+            .get(&utxo_id)
+            .await
+            .map_err(Error::FailedToGetRoom)?
+            .ok_or(Error::RoomDoesntExist(utxo_id))?;
+
+        for encoded_output in encoded_outputs {
+            result_outputs.push(
+                rsa::decode_by_chanks(encoded_output, room.clone().rsa_private_key)
+                    .map_err(Error::FailedToDecodeByChanks)?,
+            );
+        }
+
+        let mut nonce = Vec::<u8>::new();
+        let mut encoded_self_output = room.output;
+        for public_key in room.public_keys {
+            let encoding_result =
+                rsa::encode_by_chanks(encoded_self_output.clone(), public_key, nonce.clone())
+                    .map_err(Error::FailedToEncodeByChanks)?;
+
+            nonce = encoding_result.nonce;
+            encoded_self_output = encoding_result.encoded_msg;
+        }
+
+        result_outputs.push(encoded_self_output);
+
+        Ok(result_outputs)
     }
 }

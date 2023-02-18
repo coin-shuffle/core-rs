@@ -12,6 +12,9 @@ pub enum Error {
     UtxoIsNotPresented(U256),
 }
 
+pub type Output = Vec<u8>;
+pub type Outputs = Vec<Output>;
+
 /// Storage that is required for the Room storing
 #[async_trait::async_trait]
 pub trait RoomStorage {

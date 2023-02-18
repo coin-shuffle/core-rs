@@ -8,7 +8,7 @@ use crate::utxo_connector::types::Utxo;
 #[derive(Debug, Clone)]
 pub struct Room {
     pub utxo: Utxo,
-    pub output: String,
+    pub output: Vec<u8>,
     pub serial_number: usize,
     pub public_keys: Vec<RsaPublicKey>,
     pub status: ShuffleStatus,
@@ -21,7 +21,7 @@ impl Room {
         utxo: Utxo,
         rsa_private_key: RsaPrivateKey,
         ecdsa_private_key: LocalWallet,
-        output: String,
+        output: Vec<u8>,
     ) -> Self {
         Self {
             utxo,

@@ -1,6 +1,6 @@
 use ethers_core::k256::elliptic_curve::rand_core::{self, CryptoRng, CryptoRngCore, RngCore};
 use ethers_core::k256::sha2::Sha256;
-use rsa::{errors::Error as RSAError, Oaep, PublicKey, RsaPrivateKey, RsaPublicKey};
+pub use rsa::{errors::Error as RSAError, Oaep, PublicKey, RsaPrivateKey, RsaPublicKey};
 
 const ENCRYPTING_CHUNK_SIZE2048PUB_KEY: usize = 126;
 const ENCRYPTED_CHUNK_SIZE2048PUB_KEY: usize = 256;
@@ -17,7 +17,7 @@ pub enum Error {
 
 #[derive(Default, Clone)]
 pub struct EncryptionResult {
-    pub encrypted_msg: Vec<u8>,
+    pub encoded_msg: Vec<u8>,
     pub nonce: Vec<u8>,
 }
 
@@ -27,10 +27,14 @@ pub struct DecryptionResult {
     pub nonce: Vec<u8>,
 }
 
-pub fn encrypt_by_chanks(msg: Vec<u8>, pub_key: RsaPublicKey) -> Result<EncryptionResult, Error> {
+pub fn encode_by_chanks(
+    msg: Vec<u8>,
+    pub_key: RsaPublicKey,
+    nonce: Vec<u8>,
+) -> Result<EncryptionResult, Error> {
     let mut msg_buffer = msg.clone();
     let result = &mut EncryptionResult::default();
-    let mut rng = Noncer::new(rand::thread_rng());
+    let mut rng = Noncer::new(rand::thread_rng(), nonce);
 
     while msg_buffer.len() != 0 {
         let mut chunk = msg_buffer.to_vec();
@@ -42,7 +46,7 @@ pub fn encrypt_by_chanks(msg: Vec<u8>, pub_key: RsaPublicKey) -> Result<Encrypti
             msg_buffer = Vec::new();
         }
 
-        result.encrypted_msg.append(
+        result.encoded_msg.append(
             &mut pub_key
                 .encrypt(&mut rng, Oaep::new::<Sha256>(), &chunk[..])
                 .map_err(Error::FailedToEncryptWithPublicKey)?,
@@ -53,7 +57,7 @@ pub fn encrypt_by_chanks(msg: Vec<u8>, pub_key: RsaPublicKey) -> Result<Encrypti
     Ok(result.clone())
 }
 
-pub fn decrypt_by_chanks(msg: Vec<u8>, priv_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
+pub fn decode_by_chanks(msg: Vec<u8>, priv_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
     let mut msg_buffer = msg.clone();
     let mut decrypted_msg: Vec<u8> = Vec::new();
 
@@ -85,11 +89,8 @@ pub struct Noncer<R: CryptoRngCore> {
 }
 
 impl<R: CryptoRngCore> Noncer<R> {
-    fn new(true_rng: R) -> Self {
-        Self {
-            true_rng,
-            nonce: Vec::new(),
-        }
+    fn new(true_rng: R, nonce: Vec<u8>) -> Self {
+        Self { true_rng, nonce }
     }
 }
 
