@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use ethers_core::types::{Address, U256};
 use tokio::sync::Mutex;
 
-use crate::service::types::{Participant, Room};
+use crate::service::types::{Participant, Room, ShuffleRound};
 
 use super::{
     participants::{self, UpdateError},
@@ -34,6 +34,22 @@ impl rooms::Storage for MapStorage {
         let rooms = self.rooms.lock().await;
 
         Ok(rooms.get(id).cloned())
+    }
+
+    async fn update_room_round(
+        &self,
+        id: &uuid::Uuid,
+        round: usize,
+    ) -> Result<(), rooms::UpdateError<Self::InternalError>> {
+        let mut rooms = self.rooms.lock().await;
+
+        match rooms.get_mut(id) {
+            Some(room) => {
+                room.current_round = round;
+                Ok(())
+            }
+            None => Err(rooms::UpdateError::NotFound),
+        }
     }
 
     async fn insert_room(
@@ -85,6 +101,22 @@ impl participants::Storage for MapStorage {
         let participants = self.participants.lock().await;
 
         Ok(participants.get(id).cloned())
+    }
+
+    async fn update_participant_round(
+        &self,
+        participant: &U256,
+        round: ShuffleRound,
+    ) -> Result<(), UpdateError<Self::InternalError>> {
+        let mut participants_storage = self.participants.lock().await;
+
+        let participant = participants_storage
+            .get_mut(participant)
+            .ok_or(UpdateError::NotFound(*participant))?;
+
+        participant.status = round;
+
+        Ok(())
     }
 }
 

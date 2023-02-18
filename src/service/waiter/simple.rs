@@ -101,10 +101,7 @@ mod tests {
     use rsa::{RsaPrivateKey, RsaPublicKey};
 
     use crate::service::{
-        storage::{
-            in_memory::MapStorage, participants::Storage as ParticipantsStorage,
-            rooms::Storage as RoomsStorage,
-        },
+        storage::{in_memory::MapStorage, participants::Storage as ParticipantsStorage},
         types::participant::Participant,
         waiter::Waiter,
     };

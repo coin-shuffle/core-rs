@@ -1,15 +1,22 @@
-use ethers_core::types::U256;
+use ethers_core::{abi::Hash, types::U256};
 use rsa::RsaPublicKey;
+
+use super::{DecodedOutput, Input, Output};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
-#[repr(u8)]
-pub enum ShuffleStatus {
+pub enum ShuffleRound {
+    /// Participant added to queue before shuffle started.
     Wait,
-    Start,
-    EncodingOutputs,
-    SigningOutput,
-    Finish,
+    /// Shuffle started, the participant receiving RSA public
+    /// keys, that are required for shuffle process.
+    Start(Vec<RsaPublicKey>),
+    /// Decoded by participant outputs.
+    DecodedOutputs(Vec<Output>),
+    /// Participant signes the decoded outputs and his input
+    SigningOutput((Input, Vec<DecodedOutput>)),
+    /// Participant received the transaction hash
+    Finish(Hash),
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -18,7 +25,7 @@ pub struct Participant {
     pub room_id: Option<uuid::Uuid>,
     pub utxo_id: U256,
     pub rsa_pubkey: RsaPublicKey,
-    pub status: ShuffleStatus,
+    pub status: ShuffleRound,
 }
 
 impl Participant {
@@ -27,12 +34,7 @@ impl Participant {
             room_id: None, // because participant haven't entered room yet
             utxo_id,
             rsa_pubkey: pubkey,
-            status: ShuffleStatus::Wait,
+            status: ShuffleRound::Wait,
         }
-    }
-
-    pub fn enter_room(&mut self, room_id: uuid::Uuid) {
-        self.room_id = Some(room_id);
-        self.status = ShuffleStatus::Start;
     }
 }

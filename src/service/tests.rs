@@ -50,10 +50,7 @@ mod start_shuffle {
 
     use super::{PARTICIPANTS_NUMBER, RSA_PUBLIC_KEYS};
     use crate::service::{
-        storage::{in_memory::MapStorage, rooms::Storage as RoomsStorage},
-        types::Participant,
-        waiter::simple::SimpleWaiter,
-        Service,
+        storage::in_memory::MapStorage, types::Participant, waiter::simple::SimpleWaiter, Service,
     };
 
     /// For 5 participants in the room, return keys that are needed for participants
@@ -83,7 +80,7 @@ mod start_shuffle {
 
         assert_eq!(rooms.len(), 1, "with that number, should be only one room");
 
-        let room = rooms[0];
+        let room = &rooms[0];
 
         let pairs = service.start_shuffle(&room.id).await.unwrap();
 

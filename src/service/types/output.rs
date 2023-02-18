@@ -1,9 +1,5 @@
-use ethers_core::types::{Signature, U256};
+use ethers_core::types::Address;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct Input {
-    pub id: U256,
-    pub timestamp: u64,
-    pub signature: Signature,
-}
+pub type Output = Vec<u8>;
+
+pub type DecodedOutput = Address;

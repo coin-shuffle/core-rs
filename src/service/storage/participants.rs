@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ethers_core::types::U256;
 
-use crate::service::types::Participant;
+use crate::service::types::{Participant, ShuffleRound};
 
 #[async_trait]
 pub trait Storage {
@@ -16,6 +16,12 @@ pub trait Storage {
         &self,
         participant: &U256,
         room_id: &uuid::Uuid,
+    ) -> Result<(), UpdateError<Self::InternalError>>;
+
+    async fn update_participant_round(
+        &self,
+        participant: &U256,
+        round: ShuffleRound,
     ) -> Result<(), UpdateError<Self::InternalError>>;
 
     async fn get_participant(

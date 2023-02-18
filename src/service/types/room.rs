@@ -6,7 +6,7 @@ pub struct Room {
     pub id: uuid::Uuid,
     pub token: Address,
     pub amount: U256,
-    pub current_round: u64,
+    pub current_round: usize,
 
     /// List of all UTXO's that are participating in the room.
     /// Order in this vector represents the order which user participating
