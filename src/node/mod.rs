@@ -5,8 +5,8 @@ use ethers::signers::{LocalWallet, Signer, WalletError};
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa, utxo_connector::Connector};
 
-mod room;
-mod storage;
+pub mod room;
+pub mod storage;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error<E, R>
