@@ -9,7 +9,7 @@ use rsa::RsaPublicKey;
 
 use self::{
     storage::{participants, rooms},
-    types::{participant::Participant, room::Room, Output, ShuffleRound},
+    types::{participant::Participant, room::Room, DecodedOutput, Output, ShuffleRound},
 };
 
 pub struct Service<S, W>
@@ -198,6 +198,44 @@ where
 
         Ok(())
     }
+
+    /// If shuffle is finished, return all outputs that each participant should sign.
+    pub async fn decoded_outputs(
+        &self,
+        room_id: &uuid::Uuid,
+    ) -> Result<Vec<DecodedOutput>, DecodedOutputsError<<S as storage::Storage>::InternalError>>
+    {
+        let tx = self.storage.transaction().await?;
+
+        let room = tx
+            .get_room(room_id)
+            .await
+            .map_err(GetRoomError::Storage)?
+            .ok_or(GetRoomError::NotFound)?;
+
+        if room.current_round != room.participants.len() {
+            return Err(DecodedOutputsError::InvalidRound);
+        }
+
+        let last_participant = tx
+            .get_participant(room.participants.last().unwrap())
+            .await
+            .map_err(GetParticipantError::Storage)?
+            .ok_or(GetParticipantError::NotFound)?;
+
+        let ShuffleRound::DecodedOutputs(outputs) = last_participant.status else {
+            return Err(DecodedOutputsError::InvalidRound);
+        };
+
+        let decoded_outputs = outputs
+            .into_iter()
+            .map(|o| Address::from_slice(&o))
+            .map(|addr| if addr.is_zero() { None } else { Some(addr) })
+            .collect::<Option<Vec<DecodedOutput>>>()
+            .ok_or(DecodedOutputsError::InvalidOutputs)?;
+
+        Ok(decoded_outputs)
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -276,6 +314,8 @@ where
     UpdateParticipantRound(#[from] participants::UpdateError<SE>),
     #[error("failed to update room round: {0}")]
     UpdateRoomRound(#[from] rooms::UpdateError<SE>),
+    #[error("one or more outputs are invalid")]
+    InvalidOutputs,
 }
 
 impl<S, W> Service<S, W>
