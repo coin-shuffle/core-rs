@@ -3,8 +3,6 @@ pub mod queues;
 pub mod rooms;
 pub mod transaction;
 
-pub use transaction::*;
-
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -12,6 +10,10 @@ use ethers_core::types::{Address, U256};
 use tokio::sync::Mutex;
 
 use crate::service::types::{Participant, Room};
+
+use self::transaction::InMemoryTransaction;
+
+use super::{Transaction, TransactionGuard};
 
 pub type QueueKey = (Address, U256);
 
@@ -23,7 +25,7 @@ pub struct MapStorage {
 }
 
 impl MapStorage {
-    async fn merge(&self, other: Self) {
+    async fn merge(&self, other: &Self) {
         let mut queues = self.queues.lock().await;
         let mut rooms = self.rooms.lock().await;
         let mut participants = self.participants.lock().await;
@@ -40,6 +42,14 @@ impl MapStorage {
             participants.insert(*key, participant.clone());
         }
     }
+
+    async fn copy(&self) -> Self {
+        Self {
+            queues: Arc::new(Mutex::new(self.queues.lock().await.clone())),
+            rooms: Arc::new(Mutex::new(self.rooms.lock().await.clone())),
+            participants: Arc::new(Mutex::new(self.participants.lock().await.clone())),
+        }
+    }
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -48,4 +58,11 @@ pub enum InternalError {}
 #[async_trait]
 impl super::Storage for MapStorage {
     type InternalError = InternalError;
+    type Transaction = InMemoryTransaction;
+
+    async fn transaction(
+        &self,
+    ) -> Result<TransactionGuard<Self::Transaction>, <Self as super::Storage>::InternalError> {
+        Ok(TransactionGuard::new(InMemoryTransaction::new(self).await))
+    }
 }

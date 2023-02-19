@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use ethers_core::types::{Address, U256};
 
 use crate::service::storage::{self, participants, queues, rooms};
@@ -15,7 +16,7 @@ where
     room_size: usize,
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl<S> Waiter for SimpleWaiter<S>
 where
     S: storage::Storage,
@@ -43,6 +44,8 @@ where
     ) -> Result<Vec<Room>, Self::InternalError> {
         let mut rooms = Vec::new();
 
+        let tx = self.storage.transaction().await.unwrap();
+
         // TODO: remake it to for loop
         loop {
             let participants = self
@@ -51,6 +54,7 @@ where
                 .await?;
 
             if participants.len() < self.room_size {
+                let _ = tx.commit().await;
                 // FIXME: distribute left participants between existing rooms
                 return Ok(rooms);
             }
