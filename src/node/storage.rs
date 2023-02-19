@@ -1,5 +1,6 @@
 use ethers::core::types::U256;
 use std::{collections::HashMap, sync::Arc};
+use ethers::providers::Http;
 use tokio::sync::Mutex;
 
 use super::room::Room;
@@ -29,6 +30,14 @@ pub trait RoomStorage {
 /// Defaul realization of the Node's RoomStorage
 pub struct RoomMemoryStorage {
     room_list: Arc<Mutex<HashMap<U256, Room>>>,
+}
+
+impl RoomMemoryStorage {
+    pub fn new() -> Self {
+        Self {
+            room_list: Arc::new(Mutex::new(HashMap::new()))
+        }
+    }
 }
 
 #[async_trait::async_trait]
