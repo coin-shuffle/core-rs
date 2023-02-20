@@ -7,8 +7,9 @@ edition = "2021"
 
 [features]
 default = ["all"]
-all = ["serde"]
+all = ["serde", "service"]
 serde = ["dep:serde", "uuid/serde", "rsa/serde"]
+service = []
 
 [dependencies]
 ethers-core = "1.0.2"
@@ -26,6 +27,10 @@ features = [
     "v4",                # Lets you generate random UUIDs
     "fast-rng",          # Use a faster (but still sufficiently random) RNG
 ]
+
+[dependencies.coin-shuffle-contracts-bindings]
+git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
+branch = "develop"
 
 [dev-dependencies]
 tokio = { version = "1.25", features = ["test-util", "macros"] }

@@ -80,10 +80,7 @@ async fn happy_path() {
     let room = &rooms[0];
 
     for (position, participant) in room.participants.iter().enumerate() {
-        let keys = service
-            .participant_keys(&room.id, participant)
-            .await
-            .unwrap();
+        let keys = service.participant_keys(participant).await.unwrap();
 
         assert_eq!(
             keys.len(),
