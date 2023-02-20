@@ -10,9 +10,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - uses: webfactory/ssh-agent@v0.7.0
+      - name: Give GitHub Actions access to coin-shuffle/core-bindings
+        uses: webfactory/ssh-agent@v0.5.4
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.SECRET_REPO_DEPLOY_KEY }}
 
       - name: Install stable toolchain
         uses: actions-rs/toolchain@v1
