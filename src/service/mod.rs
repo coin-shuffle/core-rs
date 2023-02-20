@@ -297,7 +297,7 @@ where
         &self,
         room_id: &uuid::Uuid,
     ) -> Result<Hash, SendTransactionError<<S as storage::Storage>::InternalError>> {
-        let outputs = self.decoded_outputs(room_id).await?;
+        let _outputs = self.decoded_outputs(room_id).await?;
 
         let tx = self.storage.transaction().await?;
 
