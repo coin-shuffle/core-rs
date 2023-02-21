@@ -3,7 +3,8 @@ use ethers::core::types::U256;
 use ethers::signers::{LocalWallet, Signer, WalletError};
 
 use self::{room::Room, storage::Outputs};
-use crate::{node::storage::RoomStorage, rsa, utxo_connector::Connector};
+use crate::{node::storage::RoomStorage, rsa};
+pub use coin_shuffle_contracts_bindings::utxo::{Contract, Utxo};
 
 pub mod room;
 pub mod storage;
@@ -21,23 +22,23 @@ where
     #[error("utxo connector error: {0}")]
     UtxoConnector(E),
     #[error("failed to get room: {0}")]
-    FailedToGetRoom(R),
+    GetRoom(R),
     #[error("failed to insert room: {0}")]
-    FailedToInsertRoom(R),
+    InsertRoom(R),
     #[error("failed to update room: {0}")]
-    FailedToUpdateRoom(R),
+    UpdateRoom(R),
     #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
     RoomDoesntExist(U256),
     #[error("failed to decode by chanks: {0}")]
-    FailedToDecodeByChanks(RSAError),
+    DecodeByChanks(RSAError),
     #[error("failed to encode by chanks: {0}")]
-    FailedToEncodeByChanks(RSAError),
+    EncodeByChanks(RSAError),
     #[error("incorrect signing data: incorrect outputs size")]
     IncorrectOutputsSize,
     #[error("incorrect signing data: self outputs is absent")]
     SelfOutputsIsAbsent,
     #[error("failed to sing the message: {0}")]
-    FailedToSignMessage(#[from] WalletError),
+    SignMessage(#[from] WalletError),
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +48,7 @@ pub struct ShuffleRoundResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct Node<R: RoomStorage, C: Connector> {
+pub struct Node<R: RoomStorage, C: Contract> {
     room_storage: R,
     utxo_conn: C,
 }
@@ -55,7 +56,7 @@ pub struct Node<R: RoomStorage, C: Connector> {
 impl<R, C> Node<R, C>
 where
     R: RoomStorage,
-    C: Connector,
+    C: Contract,
 {
     pub fn new(room_storage: R, utxo_conn: C) -> Self {
         Self {
@@ -83,7 +84,7 @@ where
         self.room_storage
             .insert(&room)
             .await
-            .map_err(Error::FailedToInsertRoom)?;
+            .map_err(Error::InsertRoom)?;
 
         Ok(room)
     }
@@ -97,14 +98,14 @@ where
             .room_storage
             .get(&utxo_id)
             .await
-            .map_err(Error::FailedToGetRoom)?
+            .map_err(Error::GetRoom)?
         {
             room_inner.public_keys = public_keys;
 
             self.room_storage
                 .update(&room_inner)
                 .await
-                .map_err(Error::FailedToUpdateRoom)?;
+                .map_err(Error::UpdateRoom)?;
         }
 
         Ok(())
@@ -125,19 +126,19 @@ where
             .room_storage
             .get(&utxo_id)
             .await
-            .map_err(Error::FailedToGetRoom)?
+            .map_err(Error::GetRoom)?
             .ok_or(Error::RoomDoesntExist(utxo_id))?;
 
         room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
         self.room_storage
             .update(&room.clone())
             .await
-            .map_err(Error::FailedToUpdateRoom)?;
+            .map_err(Error::UpdateRoom)?;
 
         for encoded_output in encoded_outputs {
             result_outputs.push(
                 rsa::decode_by_chanks(encoded_output, room.clone().rsa_private_key)
-                    .map_err(Error::FailedToDecodeByChanks)?,
+                    .map_err(Error::DecodeByChanks)?,
             );
         }
 
@@ -146,7 +147,7 @@ where
         for public_key in room.public_keys {
             let encoding_result =
                 rsa::encode_by_chanks(encoded_self_output.clone(), public_key, nonce.clone())
-                    .map_err(Error::FailedToEncodeByChanks)?;
+                    .map_err(Error::EncodeByChanks)?;
 
             nonce = encoding_result.nonce;
             encoded_self_output = encoding_result.encoded_msg;
@@ -166,18 +167,18 @@ where
             .room_storage
             .get(&utxo_id)
             .await
-            .map_err(Error::FailedToGetRoom)?
+            .map_err(Error::GetRoom)?
             .ok_or(Error::RoomDoesntExist(utxo_id))?;
 
         if room.participants_number != outputs.len() {
             Err(Error::IncorrectOutputsSize)?
         }
 
-        if outputs.iter().position(|o| o == &room.output).is_none() {
+        if !outputs.iter().any(|output| output == &room.output) {
             Err(Error::IncorrectOutputsSize)?;
         };
 
-        let mut sign_message = room.utxo.id.to_string().as_bytes().to_vec();
+        let mut sign_message = room.utxo.0.to_string().as_bytes().to_vec();
 
         for mut output in outputs.clone() {
             sign_message.append(&mut output)

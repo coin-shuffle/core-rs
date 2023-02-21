@@ -32,11 +32,11 @@ pub fn encode_by_chanks(
     pub_key: RsaPublicKey,
     nonce: Vec<u8>,
 ) -> Result<EncryptionResult, Error> {
-    let mut msg_buffer = msg.clone();
+    let mut msg_buffer = msg;
     let result = &mut EncryptionResult::default();
     let mut rng = Noncer::new(rand::thread_rng(), nonce);
 
-    while msg_buffer.len() != 0 {
+    while !msg_buffer.is_empty() {
         let mut chunk = msg_buffer.to_vec();
 
         if chunk.len() >= ENCRYPTING_CHUNK_SIZE2048PUB_KEY {
@@ -58,10 +58,10 @@ pub fn encode_by_chanks(
 }
 
 pub fn decode_by_chanks(msg: Vec<u8>, priv_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
-    let mut msg_buffer = msg.clone();
+    let mut msg_buffer = msg;
     let mut decrypted_msg: Vec<u8> = Vec::new();
 
-    while msg_buffer.len() != 0 {
+    while !msg_buffer.is_empty() {
         if msg_buffer.len() < ENCRYPTED_CHUNK_SIZE2048PUB_KEY {
             Err(Error::InvalidChunkSize(msg_buffer.len()))?
         }
@@ -106,13 +106,13 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        if self.nonce.len() != 0 {
+        if self.nonce.is_empty() {
             dest.copy_from_slice(self.nonce.as_slice());
             return;
         }
 
         self.true_rng.fill_bytes(dest);
-        self.nonce = dest.to_vec().clone()
+        self.nonce = dest.to_vec()
     }
 
     fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {

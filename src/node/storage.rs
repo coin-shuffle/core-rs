@@ -1,6 +1,5 @@
 use ethers::core::types::U256;
 use std::{collections::HashMap, sync::Arc};
-use ethers::providers::Http;
 use tokio::sync::Mutex;
 
 use super::room::Room;
@@ -27,7 +26,8 @@ pub trait RoomStorage {
     async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room>, Self::Error>;
 }
 
-/// Defaul realization of the Node's RoomStorage
+/// Default realization of the Node's RoomStorage
+#[derive(Default, Clone)]
 pub struct RoomMemoryStorage {
     room_list: Arc<Mutex<HashMap<U256, Room>>>,
 }
@@ -47,11 +47,11 @@ impl RoomStorage for RoomMemoryStorage {
     async fn insert(&mut self, room: &Room) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
-        if storage.contains_key(&room.utxo.id) {
-            return Err(Error::UtxoAlreadyPresented(room.utxo.id));
+        if storage.contains_key(&room.utxo.0) {
+            return Err(Error::UtxoAlreadyPresented(room.utxo.0));
         }
 
-        storage.insert(room.utxo.id, room.clone());
+        storage.insert(room.utxo.0, room.clone());
 
         Ok(())
     }
@@ -59,11 +59,11 @@ impl RoomStorage for RoomMemoryStorage {
     async fn update(&mut self, room: &Room) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
-        if !storage.contains_key(&room.utxo.id) {
-            return Err(Error::UtxoIsNotPresented(room.utxo.id));
+        if !storage.contains_key(&room.utxo.0) {
+            return Err(Error::UtxoIsNotPresented(room.utxo.0));
         }
 
-        storage.insert(room.utxo.id, room.clone());
+        storage.insert(room.utxo.0, room.clone());
 
         Ok(())
     }
@@ -71,7 +71,7 @@ impl RoomStorage for RoomMemoryStorage {
     async fn get(&self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
         let storage = self.room_list.lock().await;
 
-        Ok(storage.get(utxo_id).map(|room| room.clone()))
+        Ok(storage.get(utxo_id).cloned())
     }
 
     async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
