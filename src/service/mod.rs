@@ -510,6 +510,38 @@ where
             .map_err(GetRoomError::Storage)?
             .ok_or(GetRoomError::NotFound)
     }
+
+    /// check that all participants in the room passed signed inputs with outputs
+    pub async fn is_signature_passed(
+        &self,
+        room_id: &uuid::Uuid,
+    ) -> Result<bool, SignatureError<<S as storage::Storage>::InternalError>> {
+        let tx = self.storage.transaction().await?;
+
+        let room = tx
+            .get_room(room_id)
+            .await
+            .map_err(GetRoomError::Storage)?
+            .ok_or(GetRoomError::NotFound)?;
+
+        if room.current_round != room.participants.len() {
+            return Ok(false);
+        }
+
+        for participant_id in room.participants.iter() {
+            let participant = tx
+                .get_participant(&participant_id)
+                .await
+                .map_err(GetParticipantError::Storage)?
+                .ok_or(GetParticipantError::NotFound)?;
+
+            let ShuffleRound::SigningOutput(_) = participant.status else {
+                return Ok(false);
+            };
+        }
+
+        Ok(true)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
