@@ -27,7 +27,7 @@ pub trait RoomStorage {
 }
 
 /// Default realization of the Node's RoomStorage
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RoomMemoryStorage {
     room_list: Arc<Mutex<HashMap<U256, Room>>>,
 }
