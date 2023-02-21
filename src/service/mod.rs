@@ -432,7 +432,7 @@ where
 
         for participant_id in room.participants.iter() {
             let participant = tx
-                .get_participant(&participant_id)
+                .get_participant(participant_id)
                 .await
                 .map_err(GetParticipantError::Storage)?
                 .ok_or(GetParticipantError::NotFound)?;
@@ -530,7 +530,7 @@ where
 
         for participant_id in room.participants.iter() {
             let participant = tx
-                .get_participant(&participant_id)
+                .get_participant(participant_id)
                 .await
                 .map_err(GetParticipantError::Storage)?
                 .ok_or(GetParticipantError::NotFound)?;

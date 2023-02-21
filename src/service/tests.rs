@@ -7,7 +7,7 @@ use rsa::pkcs8::DecodePublicKey;
 const PARTICIPANTS_NUMBER: usize = 4;
 
 /// Public keys for the various of scenarios in tests.
-const RSA_RAW_PUBLIC_KEYS: [&'static str; PARTICIPANTS_NUMBER] = [
+const RSA_RAW_PUBLIC_KEYS: [&str; PARTICIPANTS_NUMBER] = [
     r#"
 -----BEGIN PUBLIC KEY-----
 MIGeMA0GCSqGSIb3DQEBAQUAA4GMADCBiAKBgFdE/Dy8pWn8TbasNDguHQF1kplm
