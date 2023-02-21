@@ -53,12 +53,6 @@ where
                 .pop_from_queue(token, amount, self.room_size)
                 .await?;
 
-            if participants.len() < self.room_size {
-                let _ = tx.commit().await;
-                // FIXME: distribute left participants between existing rooms
-                return Ok(rooms);
-            }
-
             let room = Room::new(*token, *amount, participants);
 
             self.storage.insert_room(&room).await?;
@@ -67,6 +61,14 @@ where
                 self.storage
                     .update_participant_room(participant, &room.id)
                     .await?;
+            }
+
+            if room.participants.len() < self.room_size {
+                let _ = tx.commit().await;
+
+                rooms.push(room);
+
+                return Ok(rooms);
             }
 
             rooms.push(room);
