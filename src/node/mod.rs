@@ -177,7 +177,7 @@ where
             Err(Error::IncorrectOutputsSize)?;
         };
 
-        let mut sign_message = room.utxo.0.to_string().as_bytes().to_vec();
+        let mut sign_message = room.utxo.id.to_string().as_bytes().to_vec();
 
         for mut output in outputs.clone() {
             sign_message.append(&mut output)

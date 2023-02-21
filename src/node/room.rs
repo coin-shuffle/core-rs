@@ -2,7 +2,7 @@ use ethers::signers::LocalWallet;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use crate::types::ShuffleStatus;
-use coin_shuffle_contracts_bindings::utxo::Utxo;
+use coin_shuffle_contracts_bindings::utxo::types::Utxo;
 
 // todo #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]

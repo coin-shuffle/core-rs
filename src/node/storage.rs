@@ -47,11 +47,11 @@ impl RoomStorage for RoomMemoryStorage {
     async fn insert(&mut self, room: &Room) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
-        if storage.contains_key(&room.utxo.0) {
-            return Err(Error::UtxoAlreadyPresented(room.utxo.0));
+        if storage.contains_key(&room.utxo.id) {
+            return Err(Error::UtxoAlreadyPresented(room.utxo.id));
         }
 
-        storage.insert(room.utxo.0, room.clone());
+        storage.insert(room.utxo.id, room.clone());
 
         Ok(())
     }
@@ -59,11 +59,11 @@ impl RoomStorage for RoomMemoryStorage {
     async fn update(&mut self, room: &Room) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
-        if !storage.contains_key(&room.utxo.0) {
-            return Err(Error::UtxoIsNotPresented(room.utxo.0));
+        if !storage.contains_key(&room.utxo.id) {
+            return Err(Error::UtxoIsNotPresented(room.utxo.id));
         }
 
-        storage.insert(room.utxo.0, room.clone());
+        storage.insert(room.utxo.id, room.clone());
 
         Ok(())
     }
