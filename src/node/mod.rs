@@ -4,7 +4,7 @@ use ethers::signers::{LocalWallet, Signer, WalletError};
 
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa};
-pub use coin_shuffle_contracts_bindings::utxo::{Contract, Utxo};
+pub use coin_shuffle_contracts_bindings::utxo::{Connector, Utxo};
 
 pub mod room;
 pub mod storage;
