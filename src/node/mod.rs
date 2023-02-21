@@ -1,11 +1,9 @@
 use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use ethers::core::types::U256;
 use ethers::signers::{LocalWallet, Signer, WalletError};
-
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
-pub use coin_shuffle_contracts_bindings::utxo::{Connector, Utxo};
 
 pub mod room;
 pub mod storage;
