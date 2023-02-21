@@ -6,7 +6,7 @@ pub mod transaction;
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use ethers_core::types::{Address, U256};
+use ethers::core::types::{Address, U256};
 use tokio::sync::Mutex;
 
 use crate::service::types::{Participant, Room};

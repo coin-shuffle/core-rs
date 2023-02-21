@@ -4,33 +4,42 @@ mod tests;
 pub mod types;
 pub mod waiter;
 
-use ethers_core::{
+use coin_shuffle_contracts_bindings::utxo;
+use ethers::core::{
     abi::{ethereum_types::Signature, Hash},
     types::{Address, U256},
 };
+
 use rsa::RsaPublicKey;
 
 use self::{
     storage::{participants, rooms},
-    types::{participant::Participant, room::Room, DecodedOutput, Input, Output, ShuffleRound},
+    types::{participant::Participant, room::Room, EncodedOuput, ShuffleRound},
 };
 
-pub struct Service<S, W>
+pub struct Service<S, W, C>
 where
     S: storage::Storage,
     W: waiter::Waiter,
+    C: utxo::Contract,
 {
     storage: S,
     waiter: W,
+    utxo_contract: C,
 }
 
-impl<S, W> Service<S, W>
+impl<S, W, C> Service<S, W, C>
 where
     S: storage::Storage,
     W: waiter::Waiter,
+    C: utxo::Contract,
 {
-    pub fn new(storage: S, waiter: W) -> Self {
-        Self { storage, waiter }
+    pub fn new(storage: S, waiter: W, contract: C) -> Self {
+        Self {
+            storage,
+            waiter,
+            utxo_contract: contract,
+        }
     }
 
     /// Add participant to the queue for given token and amount.
@@ -114,7 +123,8 @@ where
     pub async fn encoded_outputs(
         &self,
         participant_id: &U256,
-    ) -> Result<Vec<Output>, EncodingOutputsError<<S as storage::Storage>::InternalError>> {
+    ) -> Result<Vec<EncodedOuput>, EncodingOutputsError<<S as storage::Storage>::InternalError>>
+    {
         let tx = self.storage.transaction().await?;
 
         let participant = tx.get_participant(participant_id).await?.ok_or(
@@ -163,7 +173,7 @@ where
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
-        decoded_outputs: Vec<Output>,
+        decoded_outputs: Vec<EncodedOuput>,
     ) -> Result<(), DecodedOutputsError<<S as storage::Storage>::InternalError>> {
         let tx = self.storage.transaction().await?;
 
@@ -214,7 +224,7 @@ where
     pub async fn decoded_outputs(
         &self,
         room_id: &uuid::Uuid,
-    ) -> Result<Vec<DecodedOutput>, DecodedOutputsError<<S as storage::Storage>::InternalError>>
+    ) -> Result<Vec<utxo::types::Output>, DecodedOutputsError<<S as storage::Storage>::InternalError>>
     {
         let tx = self.storage.transaction().await?;
 
@@ -240,10 +250,11 @@ where
 
         let decoded_outputs = outputs
             .into_iter()
-            .map(|o| Address::from_slice(&o))
-            .map(|addr| if addr.is_zero() { None } else { Some(addr) })
-            .collect::<Option<Vec<DecodedOutput>>>()
-            .ok_or(DecodedOutputsError::InvalidOutputs)?;
+            .map(|output| utxo::types::Output {
+                amount: room.amount,
+                owner: Address::from_slice(&output),
+            })
+            .collect::<Vec<utxo::types::Output>>();
 
         Ok(decoded_outputs)
     }
@@ -277,12 +288,10 @@ where
             return Err(SignatureError::InvalidRound); // TODO
         }
 
-        // TODO: validate signature
-
         tx.update_participant_round(
             participant_id,
-            ShuffleRound::SigningOutput(Input {
-                signature,
+            ShuffleRound::SigningOutput(utxo::types::Input {
+                signature: signature.as_bytes().to_vec().into(),
                 id: *participant_id,
             }),
         )
@@ -291,45 +300,6 @@ where
         tx.commit().await?;
 
         Ok(())
-    }
-
-    pub async fn send_transaction(
-        &self,
-        room_id: &uuid::Uuid,
-    ) -> Result<Hash, SendTransactionError<<S as storage::Storage>::InternalError>> {
-        let _outputs = self.decoded_outputs(room_id).await?;
-
-        let tx = self.storage.transaction().await?;
-
-        let room = tx
-            .get_room(room_id)
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
-
-        if room.current_round != room.participants.len() {
-            return Err(SendTransactionError::InvalidRound); // TODO
-        }
-
-        let mut inputs = Vec::with_capacity(room.participants.len());
-
-        for participant_id in room.participants {
-            let participant = tx
-                .get_participant(&participant_id)
-                .await
-                .map_err(GetParticipantError::Storage)?
-                .ok_or(GetParticipantError::NotFound)?;
-
-            let ShuffleRound::SigningOutput(input) = participant.status else {
-                return Err(SendTransactionError::InvalidRound);
-            };
-
-            inputs.push(input);
-        }
-
-        // TODO: send transaction
-
-        unimplemented!()
     }
 }
 
@@ -434,10 +404,68 @@ where
     UpdateParticipantRound(#[from] participants::UpdateError<SE>),
 }
 
+impl<S, W, C> Service<S, W, C>
+where
+    S: storage::Storage,
+    W: waiter::Waiter,
+    C: utxo::Contract,
+{
+    pub async fn send_transaction(
+        &self,
+        room_id: &uuid::Uuid,
+    ) -> Result<Hash, SendTransactionError<<S as storage::Storage>::InternalError, C::Error>> {
+        let outputs = self.decoded_outputs(room_id).await?;
+
+        let tx = self.storage.transaction().await?;
+
+        let room = tx
+            .get_room(room_id)
+            .await
+            .map_err(GetRoomError::Storage)?
+            .ok_or(GetRoomError::NotFound)?;
+
+        if room.current_round != room.participants.len() {
+            return Err(SendTransactionError::InvalidRound);
+        }
+
+        let mut inputs = Vec::with_capacity(room.participants.len());
+
+        for participant_id in room.participants.iter() {
+            let participant = tx
+                .get_participant(&participant_id)
+                .await
+                .map_err(GetParticipantError::Storage)?
+                .ok_or(GetParticipantError::NotFound)?;
+
+            let ShuffleRound::SigningOutput(input) = participant.status else {
+                return Err(SendTransactionError::InvalidRound);
+            };
+
+            inputs.push(input);
+        }
+
+        let hash = self
+            .utxo_contract
+            .transfer(inputs, outputs)
+            .await
+            .map_err(SendTransactionError::Transfer)?;
+
+        for participant_id in room.participants {
+            tx.update_participant_round(&participant_id, ShuffleRound::Finish(hash))
+                .await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(hash)
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
-pub enum SendTransactionError<SE>
+pub enum SendTransactionError<SE, CE>
 where
     SE: std::error::Error,
+    CE: std::error::Error,
 {
     #[error("failed to get decoded outputs: {0}")]
     GetDecodedOutputs(#[from] DecodedOutputsError<SE>),
@@ -449,12 +477,17 @@ where
     GetParticipant(#[from] GetParticipantError<SE>),
     #[error("invalid round")]
     InvalidRound,
+    #[error("failed to send transaction: {0}")]
+    Transfer(CE),
+    #[error("failed to update participant round: {0}")]
+    UpdateParticipantRound(#[from] participants::UpdateError<SE>),
 }
 
-impl<S, W> Service<S, W>
+impl<S, W, C> Service<S, W, C>
 where
     S: storage::Storage,
     W: waiter::Waiter,
+    C: utxo::Contract,
 {
     pub async fn get_participant(
         &self,

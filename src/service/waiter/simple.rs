@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ethers_core::types::{Address, U256};
+use ethers::core::types::{Address, U256};
 
 use crate::service::storage::{self, participants, queues, rooms};
 use crate::service::types::Room;
@@ -100,7 +100,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use ethers_core::types::{Address, U256};
+    use ethers::core::types::{Address, U256};
     use rand::rngs::OsRng;
     use rsa::{RsaPrivateKey, RsaPublicKey};
 
