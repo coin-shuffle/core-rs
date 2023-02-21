@@ -4,6 +4,7 @@ use ethers::signers::{LocalWallet, Signer, WalletError};
 
 use self::{room::Room, storage::Outputs};
 use crate::{node::storage::RoomStorage, rsa};
+use coin_shuffle_contracts_bindings::utxo::Contract;
 pub use coin_shuffle_contracts_bindings::utxo::{Connector, Utxo};
 
 pub mod room;
@@ -48,7 +49,7 @@ pub struct ShuffleRoundResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct Node<R: RoomStorage, C: Contract> {
+pub struct Node<R: RoomStorage, C: > {
     room_storage: R,
     utxo_conn: C,
 }
