@@ -9,7 +9,7 @@ opt-level = 3
 [features]
 default = ["all"]
 all     = ["serde", "service", "node"]
-service = []
+service = ["tokio/rt"]
 node    = []
 serde   = ["dep:serde", "uuid/serde", "rsa/serde"]
 
@@ -28,7 +28,7 @@ features = ["sync"]
 
 [dependencies.serde]
 version = "1.0.124"
-features = ["derive", "rc", "alloc"]
+features = ["derive"]
 optional = true
 
 [dependencies.ethers-core]
