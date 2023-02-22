@@ -1,4 +1,4 @@
-use ethers_core::types::{Address, Signature, U256};
+use ethers::core::types::{Address, Signature, U256};
 use rsa::RsaPublicKey;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -26,11 +26,12 @@ impl Room {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 #[repr(u8)]
-pub enum ShuffleState {
-    Start,
-    EncodingOutputs,
-    SigningOutput,
-    Finish,
+pub enum ShuffleStatus {
+    SearchParticipants,
+    ShuffleStart,
+    Shuffle,
+    SigningOutputs,
+    TxHashDistribution,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -40,7 +41,7 @@ pub struct Participant {
     pub room_id: uuid::Uuid,
     pub utxo_id: U256,
     pub rsa_pubkey: RsaPublicKey,
-    pub state: ShuffleState,
+    pub state: ShuffleStatus,
 }
 
 impl Participant {
@@ -50,7 +51,7 @@ impl Participant {
             room_id,
             utxo_id,
             rsa_pubkey: pubkey,
-            state: ShuffleState::Start,
+            state: ShuffleStatus::ShuffleStart,
         }
     }
 }
