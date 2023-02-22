@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [profile.dev.package.num-bigint-dig]
-opt-levelethers_signers = 3
+opt-level = 3
 
 [features]
 default = ["all"]
@@ -26,7 +26,7 @@ log         = { version = "0.4.17" }
 [dependencies.ethers]
 git = "https://github.com/gakonst/ethers-rs.git"
 branch = "master"
-features = ["ecdsa", "abigen", "abigen-offline", "rustls"]
+features = ["abigen", "abigen-offline", "rustls"]
 
 [dependencies.coin-shuffle-contracts-bindings]
 git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
