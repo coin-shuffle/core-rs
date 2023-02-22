@@ -1,4 +1,15 @@
-use ethers::core::rand::seq::SliceRandom;
+pub mod storage;
+#[cfg(test)]
+mod tests;
+pub mod types;
+pub mod waiter;
+
+use coin_shuffle_contracts_bindings::utxo;
+use ethers::core::{
+    abi::{ethereum_types::Signature, Hash},
+    types::{Address, U256},
+};
+
 use rsa::RsaPublicKey;
 
 use self::{

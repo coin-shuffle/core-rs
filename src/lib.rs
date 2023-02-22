@@ -1,4 +1,5 @@
 pub mod rsa;
+pub mod types;
 
 #[cfg(feature = "service")]
 pub mod service;
