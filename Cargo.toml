@@ -3,34 +3,30 @@ name = "coin-shuffle-core"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.dev.package.num-bigint-dig]
+opt-levelethers_signers = 3
 
 [features]
 default = ["all"]
-all = ["serde", "service"]
-serde = ["dep:serde", "uuid/serde", "rsa/serde"]
+all     = ["serde", "service", "node"]
 service = []
+node    = []
+serde   = ["dep:serde", "uuid/serde", "rsa/serde"]
 
 [dependencies]
-serde = { version = "1.0.152", optional = true }
-rsa = "0.8.1"
-rand = { version = "0.8.5", features = ["getrandom"] }
-async-trait = "0.1.64"
-thiserror = "1"
-tokio = { version = "1.25", features = ["sync", "rt"] }
-log = "0.4.17"
+serde       = { version = "1.0.124", features = ["derive", "rc", "alloc"], optional = true }
+rsa         = { version = "0.8.1"  }
+rand        = { version = "0.8.5",   features = ["getrandom"] }
+async-trait = { version = "0.1.64" }
+uuid        = { version = "1.3.0",   features = ["v4", "fast-rng"] }
+thiserror   = { version = "1.0.38" }
+tokio       = { version = "1.25",    features = ["sync", "rt"], optional = true }
+log         = { version = "0.4.17" }
 
 [dependencies.ethers]
 git = "https://github.com/gakonst/ethers-rs.git"
 branch = "master"
-features = ["rustls"]
-
-[dependencies.uuid]
-version = "1.3.0"
-features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
-]
+features = ["ecdsa", "abigen", "abigen-offline", "rustls"]
 
 [dependencies.coin-shuffle-contracts-bindings]
 git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
