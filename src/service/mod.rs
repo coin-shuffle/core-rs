@@ -5,7 +5,7 @@ pub mod types;
 pub mod waiter;
 
 use coin_shuffle_contracts_bindings::utxo;
-use ethers::core::{
+use ethers_core::{
     abi::{ethereum_types::Signature, Hash},
     types::{Address, U256},
 };

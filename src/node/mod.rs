@@ -1,9 +1,9 @@
-use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
-use ethers::core::types::U256;
-use ethers::signers::{LocalWallet, Signer, WalletError};
 use self::{room::Room, storage::Outputs};
+use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
+use ethers_core::types::U256;
+use ethers_signers::{LocalWallet, Signer, WalletError};
 
 pub mod room;
 pub mod storage;
@@ -47,7 +47,7 @@ pub struct ShuffleRoundResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct Node<R: RoomStorage, C: > {
+pub struct Node<R: RoomStorage, C> {
     room_storage: R,
     utxo_conn: C,
 }

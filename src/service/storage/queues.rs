@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ethers::core::types::{Address, U256};
+use ethers_core::types::{Address, U256};
 
 #[async_trait]
 pub trait Storage {

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ethers::core::types::U256;
+use ethers_core::types::U256;
 
 use crate::service::types::{Participant, ShuffleRound};
 

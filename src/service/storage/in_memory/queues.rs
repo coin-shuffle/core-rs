@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry;
 
 use async_trait::async_trait;
-use ethers::core::{abi::Address, types::U256};
+use ethers_core::{abi::Address, types::U256};
 
 use crate::service::storage::queues;
 

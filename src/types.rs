@@ -1,4 +1,4 @@
-use ethers::core::types::{Address, Signature, U256};
+use ethers_core::types::{Address, Signature, U256};
 use rsa::RsaPublicKey;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

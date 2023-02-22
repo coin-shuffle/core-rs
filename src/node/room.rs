@@ -1,4 +1,4 @@
-use ethers::signers::LocalWallet;
+use ethers_signers::LocalWallet;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 
 use crate::types::ShuffleStatus;

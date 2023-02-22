@@ -1,4 +1,4 @@
-use ethers::core::types::{Address, U256};
+use ethers_core::types::{Address, U256};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]

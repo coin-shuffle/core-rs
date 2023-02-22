@@ -14,19 +14,30 @@ node    = []
 serde   = ["dep:serde", "uuid/serde", "rsa/serde"]
 
 [dependencies]
-serde       = { version = "1.0.124", features = ["derive", "rc", "alloc"], optional = true }
 rsa         = { version = "0.8.1"  }
 rand        = { version = "0.8.5",   features = ["getrandom"] }
 async-trait = { version = "0.1.64" }
 uuid        = { version = "1.3.0",   features = ["v4", "fast-rng"] }
 thiserror   = { version = "1.0.38" }
-tokio       = { version = "1.25",    features = ["sync", "rt"] }
 log         = { version = "0.4.17" }
 
-[dependencies.ethers]
+[dependencies.tokio]
+version = "1.25"
+default-features = false
+features = ["sync"]
+
+[dependencies.serde]
+version = "1.0.124"
+features = ["derive", "rc", "alloc"]
+optional = true
+
+[dependencies.ethers-core]
 git = "https://github.com/gakonst/ethers-rs.git"
 branch = "master"
-features = ["abigen", "abigen-offline", "rustls"]
+
+[dependencies.ethers-signers]
+git = "https://github.com/gakonst/ethers-rs.git"
+branch = "master"
 
 [dependencies.coin-shuffle-contracts-bindings]
 git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"

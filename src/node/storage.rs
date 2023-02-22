@@ -1,4 +1,4 @@
-use ethers::core::types::U256;
+use ethers_core::types::U256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -35,7 +35,7 @@ pub struct RoomMemoryStorage {
 impl RoomMemoryStorage {
     pub fn new() -> Self {
         Self {
-            room_list: Arc::new(Mutex::new(HashMap::new()))
+            room_list: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

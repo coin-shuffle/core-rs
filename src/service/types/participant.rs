@@ -1,5 +1,5 @@
 use coin_shuffle_contracts_bindings::utxo::types::Input;
-use ethers::core::{abi::Hash, types::U256};
+use ethers_core::{abi::Hash, types::U256};
 use rsa::RsaPublicKey;
 
 use super::EncodedOuput;

@@ -1,6 +1,6 @@
 pub mod simple;
 
-use ethers::core::types::{Address, U256};
+use ethers_core::types::{Address, U256};
 
 use super::types::Room;
 
