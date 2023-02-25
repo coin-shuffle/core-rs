@@ -41,12 +41,6 @@ impl participants::Storage for MapStorage {
         Ok(())
     }
 
-    async fn get_participant(&self, id: &U256) -> Result<Option<Participant>, Self::InternalError> {
-        let participants = self.participants.lock().await;
-
-        Ok(participants.get(id).cloned())
-    }
-
     async fn update_participant_round(
         &self,
         participant: &U256,
@@ -61,5 +55,11 @@ impl participants::Storage for MapStorage {
         participant.status = round;
 
         Ok(())
+    }
+
+    async fn get_participant(&self, id: &U256) -> Result<Option<Participant>, Self::InternalError> {
+        let participants = self.participants.lock().await;
+
+        Ok(participants.get(id).cloned())
     }
 }

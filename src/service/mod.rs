@@ -14,7 +14,7 @@ use rsa::RsaPublicKey;
 
 use self::{
     storage::{participants, rooms},
-    types::{participant::Participant, room::Room, EncodedOuput, ShuffleRound},
+    types::{participant::Participant, room::Room, EncodedOutput, ShuffleRound},
 };
 
 pub struct Service<S, W, C>
@@ -123,7 +123,7 @@ where
     pub async fn encoded_outputs(
         &self,
         participant_id: &U256,
-    ) -> Result<Vec<EncodedOuput>, EncodingOutputsError<<S as storage::Storage>::InternalError>>
+    ) -> Result<Vec<EncodedOutput>, EncodingOutputsError<<S as storage::Storage>::InternalError>>
     {
         let tx = self.storage.transaction().await?;
 
@@ -173,7 +173,7 @@ where
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
-        decoded_outputs: Vec<EncodedOuput>,
+        decoded_outputs: Vec<EncodedOutput>,
     ) -> Result<(), DecodedOutputsError<<S as storage::Storage>::InternalError>> {
         let tx = self.storage.transaction().await?;
 
@@ -311,7 +311,7 @@ where
 {
     #[error("failed to insert participant: {0}")]
     InsertParticipant(#[from] participants::InsertError<DE>),
-    #[error("failed to add paritipant to queue: {0}")]
+    #[error("failed to add participant to queue: {0}")]
     Queue(WE),
 }
 
@@ -373,7 +373,7 @@ where
     InvalidRound,
     #[error("no participant in the room")]
     NoParticipantInRoom,
-    #[error("invalid number of ouputs")]
+    #[error("invalid number of outputs")]
     InvalidNumberOfOutputs,
     #[error("failed to update participant round: {0}")]
     UpdateParticipantRound(#[from] participants::UpdateError<SE>),

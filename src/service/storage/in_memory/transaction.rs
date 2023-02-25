@@ -23,6 +23,11 @@ impl Transaction for InMemoryTransaction {
         }
     }
 
+    #[allow(clippy::misnamed_getters)]
+    fn storage(&self) -> &Self::Storage {
+        &self.snapshot
+    }
+
     /// rollback is called on `transaction` dropping
     async fn rollback(&self) -> Result<(), Self::Error> {
         Ok(())
@@ -32,10 +37,5 @@ impl Transaction for InMemoryTransaction {
         self.storage.merge(&self.snapshot).await;
 
         Ok(())
-    }
-
-    #[allow(clippy::misnamed_getters)]
-    fn storage(&self) -> &Self::Storage {
-        &self.snapshot
     }
 }

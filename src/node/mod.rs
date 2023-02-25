@@ -28,10 +28,10 @@ where
     UpdateRoom(R),
     #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
     RoomDoesntExist(U256),
-    #[error("failed to decode by chanks: {0}")]
-    DecodeByChanks(RSAError),
-    #[error("failed to encode by chanks: {0}")]
-    EncodeByChanks(RSAError),
+    #[error("failed to decode by chunks: {0}")]
+    DecodeByChunks(RSAError),
+    #[error("failed to encode by chunks: {0}")]
+    EncodeByChunks(RSAError),
     #[error("incorrect signing data: incorrect outputs size")]
     IncorrectOutputsSize,
     #[error("incorrect signing data: self outputs is absent")]
@@ -136,8 +136,8 @@ where
 
         for encoded_output in encoded_outputs {
             result_outputs.push(
-                rsa::decode_by_chanks(encoded_output, room.clone().rsa_private_key)
-                    .map_err(Error::DecodeByChanks)?,
+                rsa::decode_by_chunks(encoded_output, room.clone().rsa_private_key)
+                    .map_err(Error::DecodeByChunks)?,
             );
         }
 
@@ -145,8 +145,8 @@ where
         let mut encoded_self_output = room.output;
         for public_key in room.public_keys {
             let encoding_result =
-                rsa::encode_by_chanks(encoded_self_output.clone(), public_key, nonce.clone())
-                    .map_err(Error::EncodeByChanks)?;
+                rsa::encode_by_chunks(encoded_self_output.clone(), public_key, nonce.clone())
+                    .map_err(Error::EncodeByChunks)?;
 
             nonce = encoding_result.nonce;
             encoded_self_output = encoding_result.encoded_msg;

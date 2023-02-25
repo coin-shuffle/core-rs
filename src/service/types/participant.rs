@@ -2,7 +2,7 @@ use coin_shuffle_contracts_bindings::utxo::types::Input;
 use ethers_core::{abi::Hash, types::U256};
 use rsa::RsaPublicKey;
 
-use super::EncodedOuput;
+use super::EncodedOutput;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
@@ -13,8 +13,8 @@ pub enum ShuffleRound {
     /// keys, that are required for shuffle process.
     Start(Vec<RsaPublicKey>),
     /// Decoded by participant outputs.
-    DecodedOutputs(Vec<EncodedOuput>),
-    /// Participant signes the decoded outputs and his input
+    DecodedOutputs(Vec<EncodedOutput>),
+    /// Participant signs the decoded outputs and his input
     SigningOutput(Input),
     /// Participant received the transaction hash
     Finish(Hash),

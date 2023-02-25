@@ -130,7 +130,7 @@ mod tests {
 
         let mut participants = Vec::with_capacity(PARTICIPANTS_NUMBER);
 
-        // FIXME: generting of rsa key is very slow and must be fixed somehow
+        // FIXME: generating of rsa key is very slow and must be fixed somehow
         let private_key = RsaPrivateKey::new(&mut OsRng, bits).expect("failed to generate a key");
         let public_key = RsaPublicKey::from(&private_key);
 
