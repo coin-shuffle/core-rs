@@ -10,7 +10,7 @@ pub trait Storage {
         &self,
         token: &Address,
         amount: &U256,
-        paricipant: &U256,
+        participant: &U256,
     ) -> Result<(), Error>;
 
     /// Remove and return from queue first [`number`] participants

@@ -11,7 +11,7 @@ use ethers_core::{
 use rsa::RsaPublicKey;
 
 use self::error::Error;
-use self::types::{participant::Participant, room::Room, EncodedOuput, ShuffleRound};
+use self::types::{participant::Participant, room::Room, EncodedOutput, ShuffleRound};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -55,7 +55,7 @@ where
         self.waiter
             .add_to_queue(token, amount, &participant.utxo_id)
             .await
-            .map_err(|e| Error::Waiter(e.into()))?;
+            .map_err(Error::Waiter)?;
 
         Ok(())
     }
@@ -94,7 +94,7 @@ where
     }
 
     /// Return outputs that given participant should decrypt.
-    pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOuput>> {
+    pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOutput>> {
         let tx = self.storage.transaction().await?;
 
         let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
@@ -127,7 +127,7 @@ where
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
-        decoded_outputs: Vec<EncodedOuput>,
+        decoded_outputs: Vec<EncodedOutput>,
     ) -> Result<()> {
         let tx = self.storage.transaction().await?;
 
@@ -187,7 +187,7 @@ where
 
         let last_participant = Self::participant_by_id(
             storage,
-            &room.participants.last().expect("room can't be empty"),
+            room.participants.last().expect("room can't be empty"),
         )
         .await?;
 

@@ -42,7 +42,7 @@ where
             .storage
             .transaction()
             .await
-            .map_err(|e| Error::Storage(e.into()))?;
+            .map_err(Error::Storage)?;
 
         // TODO: remake it to for loop
         loop {
@@ -69,7 +69,7 @@ where
             if room.participants.len() < self.room_size {
                 let _ = tx.commit().await;
 
-                // FIXME: especially incorrect when there is only one left particpant
+                // FIXME: especially incorrect when there is only one left participant
                 rooms.push(room);
 
                 return Ok(rooms);
