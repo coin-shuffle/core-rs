@@ -43,21 +43,37 @@ where
     }
 
     /// Add participant to the queue for given token and amount.
-    pub async fn add_participant(
+    ///
+    /// `participant` - is a identifier of the participant's UTXO
+    pub async fn add_participant_to_queue(
         &self,
         token: &Address,
         amount: &U256,
-        participant: &Participant,
+        participant: &U256,
+    ) -> Result<(), AddParticipantError<W::InternalError, <S as storage::Storage>::InternalError>>
+    {
+        self.waiter
+            .add_to_queue(token, amount, &participant)
+            .await
+            .map_err(AddParticipantError::Queue)?;
+
+        Ok(())
+    }
+
+    /// Add participant to the system with given public key.
+    ///
+    /// # Usage
+    ///
+    /// Must be called after `add_participant_to_queue` right before the shuffle starts.
+    pub async fn add_participants(
+        &self,
+        participant: &U256,
+        public_key: &RsaPublicKey,
     ) -> Result<(), AddParticipantError<W::InternalError, <S as storage::Storage>::InternalError>>
     {
         self.storage
-            .insert_participants(vec![participant.clone()]) // TODO:
+            .insert_participants(vec![Participant::new(*participant, public_key.clone())])
             .await?;
-
-        self.waiter
-            .add_to_queue(token, amount, &participant.utxo_id)
-            .await
-            .map_err(AddParticipantError::Queue)?;
 
         Ok(())
     }
