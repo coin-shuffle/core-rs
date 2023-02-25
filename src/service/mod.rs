@@ -168,15 +168,28 @@ where
     pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
         let tx = self.storage.transaction().await?;
 
-        let room = Self::room_by_id(&tx, room_id).await?;
+        let decoded_outputs = Self::get_decoded_outputs(&tx, room_id).await?;
+
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+
+        Ok(decoded_outputs)
+    }
+
+    async fn get_decoded_outputs(
+        storage: &S,
+        room_id: &uuid::Uuid,
+    ) -> Result<Vec<utxo::types::Output>> {
+        let room = Self::room_by_id(storage, room_id).await?;
 
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
         }
 
-        let last_participant =
-            Self::participant_by_id(&tx, &room.participants.last().expect("room can't be empty"))
-                .await?;
+        let last_participant = Self::participant_by_id(
+            storage,
+            &room.participants.last().expect("room can't be empty"),
+        )
+        .await?;
 
         let ShuffleRound::DecodedOutputs(outputs) = last_participant.status else {
             return Err(Error::InvalidRound);
@@ -228,15 +241,11 @@ where
     }
 
     pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
-        let outputs = self.decoded_outputs(room_id).await?;
-
         let tx = self.storage.transaction().await?;
 
-        let room = tx
-            .get_room(room_id)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?
-            .ok_or(Error::RoomNotFound)?;
+        let outputs = Self::get_decoded_outputs(&tx, room_id).await?;
+
+        let room = Self::room_by_id(&tx, room_id).await?;
 
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
