@@ -79,11 +79,7 @@ where
         let mut keys = Vec::with_capacity(room.participants.len() - position);
 
         for participant_id in room.participants.iter().skip(position) {
-            let participant = tx
-                .get_participant(participant_id)
-                .await
-                .map_err(|e| Error::Storage(e.into()))?
-                .ok_or(Error::ParticipantNotFound)?;
+            let participant = Self::participant_by_id(&tx, participant_id).await?;
 
             keys.push(participant.rsa_pubkey.clone());
         }
@@ -249,11 +245,7 @@ where
         let mut inputs = Vec::with_capacity(room.participants.len());
 
         for participant_id in room.participants.iter() {
-            let participant = tx
-                .get_participant(participant_id)
-                .await
-                .map_err(|e| Error::Storage(e.into()))?
-                .ok_or(Error::ParticipantNotFound)?;
+            let participant = Self::participant_by_id(&tx, participant_id).await?;
 
             let ShuffleRound::SigningOutput(input) = participant.status else {
                 return Err(Error::InvalidRound);
@@ -323,32 +315,24 @@ where
             .ok_or(Error::ParticipantNotInRoom)
     }
 
-    // /// check that all participants in the room passed signed inputs with outputs
-    // pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool, SignatureError> {
-    //     let tx = self.storage.transaction().await?;
+    /// check that all participants in the room passed signed inputs with outputs
+    pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool> {
+        let tx = self.storage.transaction().await?;
 
-    //     let room = tx
-    //         .get_room(room_id)
-    //         .await
-    //         .map_err(|e| SignatureError::Storage(e.into()))?
-    //         .ok_or(GetRoomError::NotFound)?;
+        let room = Self::room_by_id(&tx, room_id).await?;
 
-    //     if room.current_round != room.participants.len() {
-    //         return Ok(false);
-    //     }
+        if room.current_round != room.participants.len() {
+            return Ok(false);
+        }
 
-    //     for participant_id in room.participants.iter() {
-    //         let participant = tx
-    //             .get_participant(participant_id)
-    //             .await
-    //             .map_err(|e| SignatureError::Storage(e.into()))?
-    //             .ok_or(GetParticipantError::NotFound)?;
+        for participant_id in room.participants.iter() {
+            let participant = Self::participant_by_id(&tx, participant_id).await?;
 
-    //         let ShuffleRound::SigningOutput(_) = participant.status else {
-    //             return Ok(false);
-    //         };
-    //     }
+            let ShuffleRound::SigningOutput(_) = participant.status else {
+                return Ok(false);
+            };
+        }
 
-    //     Ok(true)
-    // }
+        Ok(true)
+    }
 }
