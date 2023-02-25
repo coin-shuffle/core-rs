@@ -88,7 +88,7 @@ where
         Ok(room)
     }
 
-    pub async fn start_shuffle(
+    pub async fn update_shuffle_info(
         &mut self,
         public_keys: Vec<RsaPublicKey>,
         utxo_id: U256,
