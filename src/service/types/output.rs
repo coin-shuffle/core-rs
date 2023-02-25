@@ -1,1 +1,1 @@
-pub type EncodedOuput = Vec<u8>;
+pub type EncodedOutput = Vec<u8>;

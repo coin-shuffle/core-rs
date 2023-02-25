@@ -27,7 +27,7 @@ pub struct DecryptionResult {
     pub nonce: Vec<u8>,
 }
 
-pub fn encode_by_chanks(
+pub fn encode_by_chunks(
     msg: Vec<u8>,
     pub_key: RsaPublicKey,
     nonce: Vec<u8>,
@@ -57,7 +57,7 @@ pub fn encode_by_chanks(
     Ok(result.clone())
 }
 
-pub fn decode_by_chanks(msg: Vec<u8>, priv_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
+pub fn decode_by_chunks(msg: Vec<u8>, private_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
     let mut msg_buffer = msg;
     let mut decrypted_msg: Vec<u8> = Vec::new();
 
@@ -70,7 +70,7 @@ pub fn decode_by_chanks(msg: Vec<u8>, priv_key: RsaPrivateKey) -> Result<Vec<u8>
         msg_buffer = msg_buffer[ENCRYPTED_CHUNK_SIZE2048PUB_KEY..].to_vec();
 
         decrypted_msg.append(
-            &mut priv_key
+            &mut private_key
                 .decrypt(Oaep::new::<Sha256>(), chunk.as_slice())
                 .map_err(Error::FailedToDecryptWithPrivateKey)?
                 .to_vec(),
@@ -122,22 +122,22 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rsa::{decode_by_chanks, encode_by_chanks};
+    use crate::rsa::{decode_by_chunks, encode_by_chunks};
     use rsa::{RsaPrivateKey, RsaPublicKey};
 
     #[tokio::test]
     async fn happy_path() {
         let bits = 2048;
 
-        let priv_key =
+        let private_key =
             RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
-        let pub_key = RsaPublicKey::from(&priv_key);
+        let pub_key = RsaPublicKey::from(&private_key);
 
         let encode_message = "hello world";
 
         let encode_result =
-            encode_by_chanks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
-        let decode_result = decode_by_chanks(encode_result.encoded_msg, priv_key).unwrap();
+            encode_by_chunks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
+        let decode_result = decode_by_chunks(encode_result.encoded_msg, private_key).unwrap();
 
         assert_eq!(
             decode_result,
@@ -150,20 +150,20 @@ mod tests {
     async fn custom_nonce() {
         let bits = 2048;
 
-        let priv_key =
+        let private_key =
             RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
-        let pub_key = RsaPublicKey::from(&priv_key);
+        let pub_key = RsaPublicKey::from(&private_key);
 
         let encode_message = "hello world";
 
-        let encode_result1 = encode_by_chanks(
+        let encode_result1 = encode_by_chunks(
             encode_message.as_bytes().to_vec(),
             pub_key.clone(),
             Vec::new(),
         )
         .unwrap();
 
-        let encode_result2 = encode_by_chanks(
+        let encode_result2 = encode_by_chunks(
             encode_message.as_bytes().to_vec(),
             pub_key.clone(),
             encode_result1.nonce.clone(),
@@ -187,20 +187,20 @@ mod tests {
     async fn with_different_nonce() {
         let bits = 2048;
 
-        let priv_key =
+        let private_key =
             RsaPrivateKey::new(&mut rand::thread_rng(), bits).expect("failed to generate a key");
-        let pub_key = RsaPublicKey::from(&priv_key);
+        let pub_key = RsaPublicKey::from(&private_key);
 
         let encode_message = "hello world";
 
-        let encode_result1 = encode_by_chanks(
+        let encode_result1 = encode_by_chunks(
             encode_message.as_bytes().to_vec(),
             pub_key.clone(),
             Vec::new(),
         )
         .unwrap();
 
-        let encode_result2 = encode_by_chanks(
+        let encode_result2 = encode_by_chunks(
             encode_message.as_bytes().to_vec(),
             pub_key.clone(),
             Vec::new(),
