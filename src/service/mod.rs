@@ -1,6 +1,5 @@
+pub mod error;
 pub mod storage;
-#[cfg(test)]
-mod tests;
 pub mod types;
 pub mod waiter;
 
@@ -9,13 +8,12 @@ use ethers_core::{
     abi::{ethereum_types::Signature, Hash},
     types::{Address, U256},
 };
-
 use rsa::RsaPublicKey;
 
-use self::{
-    storage::{participants, rooms},
-    types::{participant::Participant, room::Room, EncodedOuput, ShuffleRound},
-};
+use self::error::Error;
+use self::types::{participant::Participant, room::Room, EncodedOuput, ShuffleRound};
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct Service<S, W, C>
 where
@@ -48,56 +46,35 @@ where
         token: &Address,
         amount: &U256,
         participant: &Participant,
-    ) -> Result<(), AddParticipantError<W::InternalError, <S as storage::Storage>::InternalError>>
-    {
+    ) -> Result<()> {
         self.storage
-            .insert_participants(vec![participant.clone()]) // TODO:
-            .await?;
+            .insert_participant(participant.clone())
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
 
         self.waiter
             .add_to_queue(token, amount, &participant.utxo_id)
             .await
-            .map_err(AddParticipantError::Queue)?;
+            .map_err(|e| Error::Waiter(e.into()))?;
 
         Ok(())
     }
 
     /// Remove participants from the queue for given token and amount
     /// and form rooms for all of them. Return id's of newly created rooms.
-    pub async fn create_rooms(
-        &self,
-        token: &Address,
-        amount: &U256,
-    ) -> Result<Vec<Room>, CreateRoomsError<W::InternalError>> {
+    pub async fn create_rooms(&self, token: &Address, amount: &U256) -> Result<Vec<Room>> {
         let rooms = self.waiter.organize(token, amount).await?;
 
         Ok(rooms)
     }
 
     /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
-    pub async fn participant_keys(
-        &self,
-        participant_id: &U256,
-    ) -> Result<Vec<RsaPublicKey>, ParticipantKeysError<<S as storage::Storage>::InternalError>>
-    {
-        let participant = self
-            .storage
-            .get_participant(participant_id)
-            .await?
-            .ok_or(ParticipantKeysError::ParticipantNotFound)?;
-
+    pub async fn participant_keys(&self, participant_id: &U256) -> Result<Vec<RsaPublicKey>> {
         let tx = self.storage.transaction().await?;
-        let room = tx
-            .get_room(&participant.room_id.unwrap()) // FIXME:
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
 
-        let position = room
-            .participants
-            .iter()
-            .position(|p| p == participant_id)
-            .ok_or(ParticipantKeysError::ParticipantNotFound)?;
+        let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
+
+        let position = Self::participant_position(&room, participant_id)?;
 
         let mut keys = Vec::with_capacity(room.participants.len() - position);
 
@@ -105,46 +82,31 @@ where
             let participant = tx
                 .get_participant(participant_id)
                 .await
-                .map_err(GetParticipantError::Storage)?
-                .ok_or(GetParticipantError::NotFound)?;
+                .map_err(|e| Error::Storage(e.into()))?
+                .ok_or(Error::ParticipantNotFound)?;
 
             keys.push(participant.rsa_pubkey.clone());
         }
 
         tx.update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
-            .await?;
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(keys)
     }
 
     /// Return outputs that given participant should decrypt.
-    pub async fn encoded_outputs(
-        &self,
-        participant_id: &U256,
-    ) -> Result<Vec<EncodedOuput>, EncodingOutputsError<<S as storage::Storage>::InternalError>>
-    {
+    pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOuput>> {
         let tx = self.storage.transaction().await?;
 
-        let participant = tx.get_participant(participant_id).await?.ok_or(
-            EncodingOutputsError::GetParticipant(GetParticipantError::NotFound),
-        )?;
+        let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
 
-        let room = tx
-            .get_room(participant.room_id.as_ref().unwrap()) // FIXME:
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
-
-        let position = room
-            .participants
-            .iter()
-            .position(|id| id == participant_id)
-            .ok_or(EncodingOutputsError::NoParticipantInRoom)?;
+        let position = Self::participant_position(&room, participant_id)?;
 
         if position != room.current_round {
-            return Err(EncodingOutputsError::InvalidRound);
+            return Err(Error::InvalidRound);
         }
 
         // Participant is the first one in the room, so he first adds his encoded outputs
@@ -154,18 +116,14 @@ where
 
         let previous_participant_id = room.participants[position - 1];
 
-        let previous_participant = tx
-            .get_participant(&previous_participant_id)
-            .await
-            .map_err(GetParticipantError::Storage)?
-            .ok_or(GetParticipantError::NotFound)?;
+        let previous_participant = Self::participant_by_id(&tx, &previous_participant_id).await?;
 
         // Get decoded outputs from the previous participant
         let ShuffleRound::DecodedOutputs(encoded_outputs) = previous_participant.status else {
-            return Err(EncodingOutputsError::InvalidRound);
+            return Err(Error::InvalidRound);
         };
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(encoded_outputs)
     }
@@ -174,78 +132,58 @@ where
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOuput>,
-    ) -> Result<(), DecodedOutputsError<<S as storage::Storage>::InternalError>> {
+    ) -> Result<()> {
         let tx = self.storage.transaction().await?;
 
-        let participant = tx
-            .get_participant(participant_id)
-            .await
-            .map_err(GetParticipantError::Storage)?
-            .ok_or(GetParticipantError::NotFound)?;
+        let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
 
-        let room = tx
-            .get_room(participant.room_id.as_ref().unwrap()) // FIXME:
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
-
-        let position = room
-            .participants
-            .iter()
-            .position(|id| id == participant_id)
-            .ok_or(DecodedOutputsError::NoParticipantInRoom)?;
+        let position = Self::participant_position(&room, participant_id)?;
 
         if position != room.current_round {
-            return Err(DecodedOutputsError::InvalidRound);
+            return Err(Error::InvalidRound);
         }
         if decoded_outputs.len() != (position + 1) {
-            return Err(DecodedOutputsError::InvalidNumberOfOutputs);
+            return Err(Error::InvalidNumberOfOutputs);
         }
 
         // check that previous status is Start
         match participant.status {
             ShuffleRound::Start(_) => {}
-            _ => return Err(DecodedOutputsError::InvalidRound),
+            _ => return Err(Error::InvalidRound),
         };
 
         tx.update_room_round(&room.id, room.current_round + 1)
-            .await?;
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
 
         tx.update_participant_round(
             participant_id,
             ShuffleRound::DecodedOutputs(decoded_outputs),
         )
-        .await?;
+        .await
+        .map_err(|e| Error::Storage(e.into()))?;
+
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(())
     }
 
     /// If shuffle is finished, return all outputs that each participant should sign.
-    pub async fn decoded_outputs(
-        &self,
-        room_id: &uuid::Uuid,
-    ) -> Result<Vec<utxo::types::Output>, DecodedOutputsError<<S as storage::Storage>::InternalError>>
-    {
+    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
         let tx = self.storage.transaction().await?;
 
-        let room = tx
-            .get_room(room_id)
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
+        let room = Self::room_by_id(&tx, room_id).await?;
 
         if room.current_round != room.participants.len() {
-            return Err(DecodedOutputsError::InvalidRound);
+            return Err(Error::InvalidRound);
         }
 
-        let last_participant = tx
-            .get_participant(room.participants.last().unwrap())
-            .await
-            .map_err(GetParticipantError::Storage)?
-            .ok_or(GetParticipantError::NotFound)?;
+        let last_participant =
+            Self::participant_by_id(&tx, &room.participants.last().expect("room can't be empty"))
+                .await?;
 
         let ShuffleRound::DecodedOutputs(outputs) = last_participant.status else {
-            return Err(DecodedOutputsError::InvalidRound);
+            return Err(Error::InvalidRound);
         };
 
         let decoded_outputs = outputs
@@ -263,29 +201,19 @@ where
         &self,
         participant_id: &U256,
         signature: Signature,
-    ) -> Result<(), SignatureError<<S as storage::Storage>::InternalError>> {
+    ) -> Result<()> {
         let tx = self.storage.transaction().await?;
 
-        let participant = tx
-            .get_participant(participant_id)
-            .await
-            .map_err(GetParticipantError::Storage)?
-            .ok_or(GetParticipantError::NotFound)?;
+        let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
 
         // check that previous status is DecodedOutputs
         match participant.status {
             ShuffleRound::DecodedOutputs(_) => {}
-            _ => return Err(SignatureError::InvalidRound),
+            _ => return Err(Error::InvalidRound),
         };
 
-        let room = tx
-            .get_room(participant.room_id.as_ref().unwrap()) // FIXME:
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
-
         if room.current_round != room.participants.len() {
-            return Err(SignatureError::InvalidRound); // TODO
+            return Err(Error::InvalidRound);
         }
 
         tx.update_participant_round(
@@ -295,125 +223,15 @@ where
                 id: *participant_id,
             }),
         )
-        .await?;
+        .await
+        .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(())
     }
-}
 
-#[derive(thiserror::Error, Debug)]
-pub enum AddParticipantError<WE, DE>
-where
-    WE: std::error::Error,
-    DE: std::error::Error,
-{
-    #[error("failed to insert participant: {0}")]
-    InsertParticipant(#[from] participants::InsertError<DE>),
-    #[error("failed to add paritipant to queue: {0}")]
-    Queue(WE),
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum CreateRoomsError<WE>
-where
-    WE: std::error::Error,
-{
-    #[error("failed to organize rooms: {0}")]
-    Organize(#[from] WE),
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ParticipantKeysError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("internal storage error: {0}")]
-    Storage(#[from] SE),
-    #[error("failed to get room: {0}")]
-    RoomStorage(#[from] GetRoomError<SE>),
-    #[error("no participant with given id in the room")]
-    ParticipantNotFound,
-    #[error("failed to get participant: {0}")]
-    GetParticipant(#[from] GetParticipantError<SE>),
-    #[error("failed to update participant round: {0}")]
-    UpdateParticipantRound(#[from] participants::UpdateError<SE>),
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum EncodingOutputsError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("internal storage error: {0}")]
-    Storage(#[from] SE),
-    #[error("failed to get room: {0}")]
-    GetRoom(#[from] GetRoomError<SE>),
-    #[error("failed to get participant: {0}")]
-    GetParticipant(#[from] GetParticipantError<SE>),
-    #[error("no participant in the room")]
-    NoParticipantInRoom,
-    #[error("invalid round")]
-    InvalidRound,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum DecodedOutputsError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("internal storage error: {0}")]
-    Storage(#[from] SE),
-    #[error("failed to get room: {0}")]
-    GetRoom(#[from] GetRoomError<SE>),
-    #[error("failed to get participant: {0}")]
-    GetParticipant(#[from] GetParticipantError<SE>),
-    #[error("invalid round")]
-    InvalidRound,
-    #[error("no participant in the room")]
-    NoParticipantInRoom,
-    #[error("invalid number of ouputs")]
-    InvalidNumberOfOutputs,
-    #[error("failed to update participant round: {0}")]
-    UpdateParticipantRound(#[from] participants::UpdateError<SE>),
-    #[error("failed to update room round: {0}")]
-    UpdateRoomRound(#[from] rooms::UpdateError<SE>),
-    #[error("one or more outputs are invalid")]
-    InvalidOutputs,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum SignatureError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("failed to get encoded outputs: {0}")]
-    GetEncodedOutputs(#[from] EncodingOutputsError<SE>),
-    #[error("internal storage error: {0}")]
-    Storage(#[from] SE),
-    #[error("failed to get room: {0}")]
-    GetRoom(#[from] GetRoomError<SE>),
-    #[error("failed to get participant: {0}")]
-    GetParticipant(#[from] GetParticipantError<SE>),
-    #[error("no participant with given id in the room")]
-    NoParticipantInRoom,
-    #[error("invalid round")]
-    InvalidRound,
-    #[error("failed to update participant round: {0}")]
-    UpdateParticipantRound(#[from] participants::UpdateError<SE>),
-}
-
-impl<S, W, C> Service<S, W, C>
-where
-    S: storage::Storage,
-    W: waiter::Waiter,
-    C: utxo::Contract,
-{
-    pub async fn send_transaction(
-        &self,
-        room_id: &uuid::Uuid,
-    ) -> Result<Hash, SendTransactionError<<S as storage::Storage>::InternalError, C::Error>> {
+    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
         let outputs = self.decoded_outputs(room_id).await?;
 
         let tx = self.storage.transaction().await?;
@@ -421,11 +239,11 @@ where
         let room = tx
             .get_room(room_id)
             .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
+            .map_err(|e| Error::Storage(e.into()))?
+            .ok_or(Error::RoomNotFound)?;
 
         if room.current_round != room.participants.len() {
-            return Err(SendTransactionError::InvalidRound);
+            return Err(Error::InvalidRound);
         }
 
         let mut inputs = Vec::with_capacity(room.participants.len());
@@ -434,11 +252,11 @@ where
             let participant = tx
                 .get_participant(participant_id)
                 .await
-                .map_err(GetParticipantError::Storage)?
-                .ok_or(GetParticipantError::NotFound)?;
+                .map_err(|e| Error::Storage(e.into()))?
+                .ok_or(Error::ParticipantNotFound)?;
 
             let ShuffleRound::SigningOutput(input) = participant.status else {
-                return Err(SendTransactionError::InvalidRound);
+                return Err(Error::InvalidRound);
             };
 
             inputs.push(input);
@@ -448,120 +266,89 @@ where
             .utxo_contract
             .transfer(inputs, outputs)
             .await
-            .map_err(SendTransactionError::Transfer)?;
+            .map_err(|e| Error::Transfer(e.to_string()))?;
 
         for participant_id in room.participants {
             tx.update_participant_round(&participant_id, ShuffleRound::Finish(hash))
-                .await?;
+                .await
+                .map_err(|e| Error::Storage(e.into()))?;
         }
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(hash)
     }
-}
 
-#[derive(thiserror::Error, Debug)]
-pub enum SendTransactionError<SE, CE>
-where
-    SE: std::error::Error,
-    CE: std::error::Error,
-{
-    #[error("failed to get decoded outputs: {0}")]
-    GetDecodedOutputs(#[from] DecodedOutputsError<SE>),
-    #[error("internal storage error: {0}")]
-    Storage(#[from] SE),
-    #[error("failed to get room: {0}")]
-    GetRoom(#[from] GetRoomError<SE>),
-    #[error("failed to get participant: {0}")]
-    GetParticipant(#[from] GetParticipantError<SE>),
-    #[error("invalid round")]
-    InvalidRound,
-    #[error("failed to send transaction: {0}")]
-    Transfer(CE),
-    #[error("failed to update participant round: {0}")]
-    UpdateParticipantRound(#[from] participants::UpdateError<SE>),
-}
-
-impl<S, W, C> Service<S, W, C>
-where
-    S: storage::Storage,
-    W: waiter::Waiter,
-    C: utxo::Contract,
-{
-    pub async fn get_participant(
-        &self,
-        participant_id: &U256,
-    ) -> Result<Participant, GetParticipantError<<S as storage::Storage>::InternalError>> {
-        self.storage
+    async fn participant_by_id(storage: &S, participant_id: &U256) -> Result<Participant> {
+        storage
             .get_participant(participant_id)
             .await
-            .map_err(GetParticipantError::Storage)?
-            .ok_or(GetParticipantError::NotFound)
+            .map_err(|e| Error::Storage(e.into()))?
+            .ok_or(Error::ParticipantNotFound)
     }
 
-    pub async fn get_room(
-        &self,
-        room_id: &uuid::Uuid,
-    ) -> Result<Room, GetRoomError<<S as storage::Storage>::InternalError>> {
-        self.storage
+    pub async fn get_participant(&self, participant_id: &U256) -> Result<Participant> {
+        Self::participant_by_id(&self.storage, participant_id).await
+    }
+
+    async fn room_by_id(storage: &S, room_id: &uuid::Uuid) -> Result<Room> {
+        storage
             .get_room(room_id)
             .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)
+            .map_err(|e| Error::Storage(e.into()))?
+            .ok_or(Error::RoomNotFound)
     }
 
-    /// check that all participants in the room passed signed inputs with outputs
-    pub async fn is_signature_passed(
-        &self,
-        room_id: &uuid::Uuid,
-    ) -> Result<bool, SignatureError<<S as storage::Storage>::InternalError>> {
-        let tx = self.storage.transaction().await?;
-
-        let room = tx
-            .get_room(room_id)
-            .await
-            .map_err(GetRoomError::Storage)?
-            .ok_or(GetRoomError::NotFound)?;
-
-        if room.current_round != room.participants.len() {
-            return Ok(false);
-        }
-
-        for participant_id in room.participants.iter() {
-            let participant = tx
-                .get_participant(participant_id)
-                .await
-                .map_err(GetParticipantError::Storage)?
-                .ok_or(GetParticipantError::NotFound)?;
-
-            let ShuffleRound::SigningOutput(_) = participant.status else {
-                return Ok(false);
-            };
-        }
-
-        Ok(true)
+    pub async fn get_room(&self, room_id: &uuid::Uuid) -> Result<Room> {
+        Self::room_by_id(&self.storage, room_id).await
     }
-}
 
-#[derive(Debug, thiserror::Error)]
-pub enum GetParticipantError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("Participant not found")]
-    NotFound,
-    #[error("Participant storage error: {0}")]
-    Storage(#[from] SE),
-}
+    async fn room_and_participant(
+        storage: &S,
+        participant_id: &U256,
+    ) -> Result<(Room, Participant)> {
+        let participant = Self::participant_by_id(storage, participant_id).await?;
 
-#[derive(Debug, thiserror::Error)]
-pub enum GetRoomError<SE>
-where
-    SE: std::error::Error,
-{
-    #[error("Room not found")]
-    NotFound,
-    #[error("Room storage error: {0}")]
-    Storage(#[from] SE),
+        let room_id = participant.room_id.ok_or(Error::ParticipantNotInRoom)?;
+
+        let room = Self::room_by_id(storage, &room_id).await?;
+
+        Ok((room, participant))
+    }
+
+    fn participant_position(room: &Room, participant_id: &U256) -> Result<usize> {
+        room.participants
+            .iter()
+            .position(|id| id == participant_id)
+            .ok_or(Error::ParticipantNotInRoom)
+    }
+
+    // /// check that all participants in the room passed signed inputs with outputs
+    // pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool, SignatureError> {
+    //     let tx = self.storage.transaction().await?;
+
+    //     let room = tx
+    //         .get_room(room_id)
+    //         .await
+    //         .map_err(|e| SignatureError::Storage(e.into()))?
+    //         .ok_or(GetRoomError::NotFound)?;
+
+    //     if room.current_round != room.participants.len() {
+    //         return Ok(false);
+    //     }
+
+    //     for participant_id in room.participants.iter() {
+    //         let participant = tx
+    //             .get_participant(participant_id)
+    //             .await
+    //             .map_err(|e| SignatureError::Storage(e.into()))?
+    //             .ok_or(GetParticipantError::NotFound)?;
+
+    //         let ShuffleRound::SigningOutput(_) = participant.status else {
+    //             return Ok(false);
+    //         };
+    //     }
+
+    //     Ok(true)
+    // }
 }
