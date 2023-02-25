@@ -22,6 +22,12 @@ pub trait Storage {
         amount: &U256,
         number: usize,
     ) -> Result<Vec<U256>, Error<Self::InternalError>>;
+
+    async fn queue_length(
+        &self,
+        token: &Address,
+        amount: &U256,
+    ) -> Result<usize, Error<Self::InternalError>>;
 }
 
 #[derive(thiserror::Error, Debug)]

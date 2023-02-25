@@ -62,4 +62,20 @@ impl participants::Storage for MapStorage {
 
         Ok(())
     }
+
+    async fn add_participant_key(
+        &self,
+        participant: &U256,
+        key: &rsa::RsaPublicKey,
+    ) -> Result<(), participants::UpdateError<Self::InternalError>> {
+        let mut participants_storage = self.participants.lock().await;
+
+        let participant = participants_storage
+            .get_mut(participant)
+            .ok_or(participants::UpdateError::NotFound(*participant))?;
+
+        participant.rsa_pubkey = Some(key.clone());
+
+        Ok(())
+    }
 }

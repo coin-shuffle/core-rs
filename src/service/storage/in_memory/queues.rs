@@ -47,4 +47,18 @@ impl queues::Storage for MapStorage {
 
         Ok(tail)
     }
+
+    async fn queue_length(
+        &self,
+        token: &Address,
+        amount: &U256,
+    ) -> Result<usize, queues::Error<Self::InternalError>> {
+        let queues_storage = self.queues.lock().await;
+
+        let queue = queues_storage
+            .get(&(*token, *amount))
+            .ok_or(queues::Error::QueueNotFound)?;
+
+        Ok(queue.len())
+    }
 }

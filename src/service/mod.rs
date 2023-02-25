@@ -45,35 +45,29 @@ where
     /// Add participant to the queue for given token and amount.
     ///
     /// `participant` - is a identifier of the participant's UTXO
-    pub async fn add_participant_to_queue(
+    pub async fn add_participant(
         &self,
         token: &Address,
         amount: &U256,
-        participant: &U256,
+        participant_id: &U256,
     ) -> Result<(), AddParticipantError<W::InternalError, <S as storage::Storage>::InternalError>>
     {
+        let participant = Participant::new(*participant_id);
+
+        let tx = self
+            .storage
+            .transaction()
+            .await
+            .map_err(AddParticipantError::Transaction)?;
+
+        tx.insert_participants(vec![participant]).await?;
+
         self.waiter
-            .add_to_queue(token, amount, &participant)
+            .add_to_queue(token, amount, &participant_id)
             .await
             .map_err(AddParticipantError::Queue)?;
 
-        Ok(())
-    }
-
-    /// Add participant to the system with given public key.
-    ///
-    /// # Usage
-    ///
-    /// Must be called after `add_participant_to_queue` right before the shuffle starts.
-    pub async fn add_participants(
-        &self,
-        participant: &U256,
-        public_key: &RsaPublicKey,
-    ) -> Result<(), AddParticipantError<W::InternalError, <S as storage::Storage>::InternalError>>
-    {
-        self.storage
-            .insert_participants(vec![Participant::new(*participant, public_key.clone())])
-            .await?;
+        let _ = tx.commit().await;
 
         Ok(())
     }
@@ -88,6 +82,20 @@ where
         let rooms = self.waiter.organize(token, amount).await?;
 
         Ok(rooms)
+    }
+
+    /// Connects to the room and returns the list of participants in the room.
+    pub async fn connect_to_room(
+        &self,
+        participant_id: &U256,
+        rsa_public_key: &RsaPublicKey,
+    ) -> eyre::Result<()> {
+        self.storage
+            .add_participant_key(participant_id, rsa_public_key)
+            .await
+            .map_err(|e| eyre::eyre!(e.to_string()))?;
+
+        Ok(())
     }
 
     /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
@@ -124,7 +132,11 @@ where
                 .map_err(GetParticipantError::Storage)?
                 .ok_or(GetParticipantError::NotFound)?;
 
-            keys.push(participant.rsa_pubkey.clone());
+            let Some(key) = participant.rsa_pubkey else {
+                return Err(ParticipantKeysError::NoRsaKey);
+            };
+
+            keys.push(key);
         }
 
         tx.update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
@@ -329,6 +341,8 @@ where
     InsertParticipant(#[from] participants::InsertError<DE>),
     #[error("failed to add paritipant to queue: {0}")]
     Queue(WE),
+    #[error("failed to init transation: {0}")]
+    Transaction(DE),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -355,6 +369,8 @@ where
     GetParticipant(#[from] GetParticipantError<SE>),
     #[error("failed to update participant round: {0}")]
     UpdateParticipantRound(#[from] participants::UpdateError<SE>),
+    #[error("no rsa key for participant")]
+    NoRsaKey,
 }
 
 #[derive(thiserror::Error, Debug)]
