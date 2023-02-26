@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ethers_core::types::U256;
+use rsa::RsaPublicKey;
 
 use crate::service::types::{Participant, ShuffleRound};
 
@@ -17,6 +18,12 @@ pub trait Storage {
         &self,
         participant: &U256,
         round: ShuffleRound,
+    ) -> Result<(), Error>;
+
+    async fn update_participant_key(
+        &self,
+        participant: &U256,
+        key: RsaPublicKey,
     ) -> Result<(), Error>;
 
     async fn get_participant(&self, participant: &U256) -> Result<Option<Participant>, Error>;
