@@ -23,4 +23,6 @@ pub enum Error {
     Transfer(String),
     #[error("Waiter error: {0}")]
     Waiter(#[from] waiter::Error),
+    #[error("No RSA pub key")]
+    NoRSAPubKey,
 }

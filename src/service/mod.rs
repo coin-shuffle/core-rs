@@ -45,15 +45,17 @@ where
         &self,
         token: &Address,
         amount: &U256,
-        participant: &Participant,
+        participant_id: &U256,
     ) -> Result<()> {
+        let participant = Participant::new(*participant_id);
+
         self.storage
-            .insert_participant(participant.clone())
+            .insert_participant(participant)
             .await
             .map_err(|e| Error::Storage(e.into()))?;
 
         self.waiter
-            .add_to_queue(token, amount, &participant.utxo_id)
+            .add_to_queue(token, amount, participant_id)
             .await
             .map_err(Error::Waiter)?;
 
@@ -66,6 +68,20 @@ where
         let rooms = self.waiter.organize(token, amount).await?;
 
         Ok(rooms)
+    }
+
+    /// Add rsa public key to participant
+    pub async fn add_participant_key(
+        &self,
+        participant_id: &U256,
+        key: RsaPublicKey,
+    ) -> Result<()> {
+        self.storage
+            .update_participant_key(participant_id, key)
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
+
+        Ok(())
     }
 
     /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
@@ -81,7 +97,9 @@ where
         for participant_id in room.participants.iter().skip(position) {
             let participant = Self::participant_by_id(&tx, participant_id).await?;
 
-            keys.push(participant.rsa_pubkey.clone());
+            let key = participant.rsa_pubkey.ok_or(Error::NoRSAPubKey)?;
+
+            keys.push(key);
         }
 
         tx.update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))

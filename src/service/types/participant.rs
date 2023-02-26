@@ -25,16 +25,16 @@ pub enum ShuffleRound {
 pub struct Participant {
     pub room_id: Option<uuid::Uuid>,
     pub utxo_id: U256,
-    pub rsa_pubkey: RsaPublicKey,
+    pub rsa_pubkey: Option<RsaPublicKey>,
     pub status: ShuffleRound,
 }
 
 impl Participant {
-    pub fn new(utxo_id: U256, pubkey: RsaPublicKey) -> Self {
+    pub fn new(utxo_id: U256) -> Self {
         Self {
             room_id: None, // because participant haven't entered room yet
             utxo_id,
-            rsa_pubkey: pubkey,
+            rsa_pubkey: None,
             status: ShuffleRound::Wait,
         }
     }
