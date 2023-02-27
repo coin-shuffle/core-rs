@@ -10,9 +10,9 @@ use tokio::runtime::Handle;
 pub trait Storage:
     queues::Storage + rooms::Storage + participants::Storage + Sync + Send + Clone
 {
-    type Transaction: Transaction<Storage = Self> + Send + Sync;
+    // type Transaction: Transaction<Storage = Self> + Send + Sync;
 
-    async fn begin(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
+    // async fn begin(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
 }
 
 #[derive(thiserror::Error, Debug)]

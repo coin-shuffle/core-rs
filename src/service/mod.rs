@@ -87,36 +87,42 @@ where
 
     /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
     pub async fn participant_keys(&self, participant_id: &U256) -> Result<Vec<RsaPublicKey>> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
+        let (room, _participant) =
+            Self::room_and_participant(&self.storage, participant_id).await?;
 
         let position = Self::participant_position(&room, participant_id)?;
 
         let mut keys = Vec::with_capacity(room.participants.len() - position);
 
         for participant_id in room.participants.iter().skip(position) {
-            let participant = Self::participant_by_id(&tx, participant_id).await?;
+            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
             let key = participant.rsa_pubkey.ok_or(Error::NoRSAPubKey)?;
 
             keys.push(key);
         }
 
-        tx.update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
+        self.storage
+            .update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
             .await
             .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // self.storage
+        //     .commit()
+        //     .await
+        //     .map_err(|e| Error::Storage(e.into()))?;
 
         Ok(keys)
     }
 
     /// Return outputs that given participant should decrypt.
     pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOutput>> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
+        let (room, _participant) =
+            Self::room_and_participant(&self.storage, participant_id).await?;
 
         let position = Self::participant_position(&room, participant_id)?;
 
@@ -131,14 +137,15 @@ where
 
         let previous_participant_id = room.participants[position - 1];
 
-        let previous_participant = Self::participant_by_id(&tx, &previous_participant_id).await?;
+        let previous_participant =
+            Self::participant_by_id(&self.storage, &previous_participant_id).await?;
 
         // Get decoded outputs from the previous participant
         let ShuffleRound::DecodedOutputs(encoded_outputs) = previous_participant.status else {
             return Err(Error::InvalidRound);
         };
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // self.storage.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(encoded_outputs)
     }
@@ -148,9 +155,9 @@ where
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
     ) -> Result<()> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
+        let (room, participant) = Self::room_and_participant(&self.storage, participant_id).await?;
 
         let position = Self::participant_position(&room, participant_id)?;
 
@@ -167,29 +174,31 @@ where
             _ => return Err(Error::InvalidRound),
         };
 
-        tx.update_room_round(&room.id, room.current_round + 1)
+        self.storage
+            .update_room_round(&room.id, room.current_round + 1)
             .await
             .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.update_participant_round(
-            participant_id,
-            ShuffleRound::DecodedOutputs(decoded_outputs),
-        )
-        .await
-        .map_err(|e| Error::Storage(e.into()))?;
+        self.storage
+            .update_participant_round(
+                participant_id,
+                ShuffleRound::DecodedOutputs(decoded_outputs),
+            )
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(())
     }
 
     /// If shuffle is finished, return all outputs that each participant should sign.
     pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?
 
-        let decoded_outputs = Self::get_decoded_outputs(&tx, room_id).await?;
+        let decoded_outputs = Self::get_decoded_outputs(&self.storage, room_id).await?;
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(decoded_outputs)
     }
@@ -230,9 +239,9 @@ where
         participant_id: &U256,
         signature: Signature,
     ) -> Result<()> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
+        let (room, participant) = Self::room_and_participant(&self.storage, participant_id).await?;
 
         // check that previous status is DecodedOutputs
         match participant.status {
@@ -244,27 +253,28 @@ where
             return Err(Error::InvalidRound);
         }
 
-        tx.update_participant_round(
-            participant_id,
-            ShuffleRound::SigningOutput(utxo::types::Input {
-                signature: signature.as_bytes().to_vec().into(),
-                id: *participant_id,
-            }),
-        )
-        .await
-        .map_err(|e| Error::Storage(e.into()))?;
+        self.storage
+            .update_participant_round(
+                participant_id,
+                ShuffleRound::SigningOutput(utxo::types::Input {
+                    signature: signature.as_bytes().to_vec().into(),
+                    id: *participant_id,
+                }),
+            )
+            .await
+            .map_err(|e| Error::Storage(e.into()))?;
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(())
     }
 
     pub async fn send_begin(&self, room_id: &uuid::Uuid) -> Result<Hash> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let outputs = Self::get_decoded_outputs(&tx, room_id).await?;
+        let outputs = Self::get_decoded_outputs(&self.storage, room_id).await?;
 
-        let room = Self::room_by_id(&tx, room_id).await?;
+        let room = Self::room_by_id(&self.storage, room_id).await?;
 
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
@@ -273,7 +283,7 @@ where
         let mut inputs = Vec::with_capacity(room.participants.len());
 
         for participant_id in room.participants.iter() {
-            let participant = Self::participant_by_id(&tx, participant_id).await?;
+            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
             let ShuffleRound::SigningOutput(input) = participant.status else {
                 return Err(Error::InvalidRound);
@@ -289,12 +299,13 @@ where
             .map_err(|e| Error::Transfer(e.to_string()))?;
 
         for participant_id in room.participants {
-            tx.update_participant_round(&participant_id, ShuffleRound::Finish(hash))
+            self.storage
+                .update_participant_round(&participant_id, ShuffleRound::Finish(hash))
                 .await
                 .map_err(|e| Error::Storage(e.into()))?;
         }
 
-        tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
+        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(hash)
     }
@@ -345,16 +356,16 @@ where
 
     /// check that all participants in the room passed signed inputs with outputs
     pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool> {
-        let tx = self.storage.begin().await?;
+        // let tx = self.storage.begin().await?;
 
-        let room = Self::room_by_id(&tx, room_id).await?;
+        let room = Self::room_by_id(&self.storage, room_id).await?;
 
         if room.current_round != room.participants.len() {
             return Ok(false);
         }
 
         for participant_id in room.participants.iter() {
-            let participant = Self::participant_by_id(&tx, participant_id).await?;
+            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
             let ShuffleRound::SigningOutput(_) = participant.status else {
                 return Ok(false);
