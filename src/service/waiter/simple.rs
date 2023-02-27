@@ -8,6 +8,7 @@ use super::{Error, Waiter};
 
 /// SimpleWaiter - is a waiter that organizes participants to partially equal rooms
 /// by the order they joined to the system.
+#[derive(Clone)]
 pub struct SimpleWaiter<S>
 where
     S: storage::Storage,
@@ -38,11 +39,7 @@ where
     async fn organize(&self, token: &Address, amount: &U256) -> Result<Vec<Room>, Error> {
         let mut rooms = Vec::new();
 
-        let tx = self
-            .storage
-            .transaction()
-            .await
-            .map_err(Error::Storage)?;
+        let tx = self.storage.transaction().await.map_err(Error::Storage)?;
 
         // TODO: remake it to for loop
         loop {
