@@ -7,7 +7,7 @@ use super::{storage, types::Room};
 /// `Waiter` a generic trait for something that will organize participants into rooms
 /// using some algorithm
 #[async_trait::async_trait]
-pub trait Waiter {
+pub trait Waiter: Clone {
     /// Add participant to queue that will be organized into rooms later
     async fn add_to_queue(
         &self,

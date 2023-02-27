@@ -7,7 +7,9 @@ use std::ops::Deref;
 use tokio::runtime::Handle;
 
 #[async_trait]
-pub trait Storage: queues::Storage + rooms::Storage + participants::Storage + Sync + Send {
+pub trait Storage:
+    queues::Storage + rooms::Storage + participants::Storage + Sync + Send + Clone
+{
     type Transaction: Transaction<Storage = Self> + Send + Sync;
 
     async fn transaction(&self) -> Result<TransactionGuard<Self::Transaction>, Error> {

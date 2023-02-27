@@ -15,6 +15,7 @@ use self::types::{participant::Participant, room::Room, EncodedOutput, ShuffleRo
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Clone)]
 pub struct Service<S, W, C>
 where
     S: storage::Storage,
