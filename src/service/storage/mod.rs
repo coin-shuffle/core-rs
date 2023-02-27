@@ -58,7 +58,7 @@ impl<T> TransactionGuard<T>
 where
     T: Transaction,
 {
-    fn new(transaction: T) -> Self {
+    pub fn new(transaction: T) -> Self {
         Self {
             inner: transaction,
             committed: false,
