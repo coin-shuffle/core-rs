@@ -12,9 +12,7 @@ pub trait Storage:
 {
     type Transaction: Transaction<Storage = Self> + Send + Sync;
 
-    async fn transaction(&self) -> Result<TransactionGuard<Self::Transaction>, Error> {
-        Ok(TransactionGuard::new(Transaction::new(self).await))
-    }
+    async fn transaction(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -33,8 +31,6 @@ pub enum Error {
 #[async_trait]
 pub trait Transaction: Send + Sync {
     type Storage: Storage;
-
-    async fn new(storage: &Self::Storage) -> Self;
 
     fn storage(&self) -> &Self::Storage;
 
