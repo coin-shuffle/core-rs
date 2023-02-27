@@ -187,7 +187,7 @@ where
     }
 
     /// If shuffle is finished, return all outputs that each participant should sign.
-    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
+    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
         let tx = self.storage.transaction().await?;
 
         let decoded_outputs = Self::get_decoded_outputs(&tx, room_id).await?;
@@ -197,10 +197,7 @@ where
         Ok(decoded_outputs)
     }
 
-    async fn get_decoded_outputs(
-        storage: &S,
-        room_id: &uuid::Uuid,
-    ) -> Result<Vec<utxo::types::Output>> {
+    async fn get_decoded_outputs(storage: &S, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
         let room = Self::room_by_id(storage, room_id).await?;
 
         if room.current_round != room.participants.len() {
@@ -219,11 +216,8 @@ where
 
         let decoded_outputs = outputs
             .into_iter()
-            .map(|output| utxo::types::Output {
-                amount: room.amount,
-                owner: Address::from_slice(&output),
-            })
-            .collect::<Vec<utxo::types::Output>>();
+            .map(|output| Address::from_slice(&output))
+            .collect::<Vec<Address>>();
 
         Ok(decoded_outputs)
     }
