@@ -259,9 +259,16 @@ where
     pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
         let tx = self.storage.transaction().await?;
 
-        let outputs = Self::get_decoded_outputs(&tx, room_id).await?;
-
         let room = Self::room_by_id(&tx, room_id).await?;
+
+        let outputs = Self::get_decoded_outputs(&tx, room_id)
+            .await?
+            .iter()
+            .map(|output| utxo::types::Output {
+                owner: *output,
+                amount: room.amount,
+            })
+            .collect::<Vec<utxo::types::Output>>();
 
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
