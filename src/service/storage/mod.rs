@@ -10,11 +10,9 @@ use tokio::runtime::Handle;
 pub trait Storage:
     queues::Storage + rooms::Storage + participants::Storage + Sync + Send + Clone
 {
-    type Transaction: Transaction<Storage = Self> + Send + Sync;
+    // type Transaction: Transaction<Storage = Self> + Send + Sync;
 
-    async fn transaction(&self) -> Result<TransactionGuard<Self::Transaction>, Error> {
-        Ok(TransactionGuard::new(Transaction::new(self).await))
-    }
+    // async fn begin(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -31,12 +29,8 @@ pub enum Error {
 
 /// Transaction - represents storage transaction logic.
 #[async_trait]
-pub trait Transaction: Send + Sync {
+pub trait Transaction: Deref<Target = Self::Storage> + Send + Sync {
     type Storage: Storage;
-
-    async fn new(storage: &Self::Storage) -> Self;
-
-    fn storage(&self) -> &Self::Storage;
 
     /// rollback is called on `transaction` dropping
     async fn rollback(&self) -> Result<(), TransactionError>;
@@ -62,7 +56,7 @@ impl<T> TransactionGuard<T>
 where
     T: Transaction,
 {
-    fn new(transaction: T) -> Self {
+    pub fn new(transaction: T) -> Self {
         Self {
             inner: transaction,
             committed: false,
@@ -82,7 +76,7 @@ where
     type Target = T::Storage;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.storage()
+        self.inner.deref()
     }
 }
 
