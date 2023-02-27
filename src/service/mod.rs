@@ -150,12 +150,13 @@ where
         Ok(encoded_outputs)
     }
 
+    ///
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
-    ) -> Result<()> {
-        // let tx = self.storage.begin().await?;
+    ) -> Result<usize> {
+        // let tx = self.storage.transaction().await?;
 
         let (room, participant) = Self::room_and_participant(&self.storage, participant_id).await?;
 
@@ -174,8 +175,10 @@ where
             _ => return Err(Error::InvalidRound),
         };
 
+        let new_round = room.current_round + 1;
+
         self.storage
-            .update_room_round(&room.id, room.current_round + 1)
+            .update_room_round(&room.id, new_round)
             .await
             .map_err(|e| Error::Storage(e.into()))?;
 
@@ -189,12 +192,12 @@ where
 
         // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
-        Ok(())
+        Ok(new_round)
     }
 
     /// If shuffle is finished, return all outputs that each participant should sign.
-    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
-        // let tx = self.storage.begin().await?
+    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
+        // let tx = self.storage.transaction().await?;
 
         let decoded_outputs = Self::get_decoded_outputs(&self.storage, room_id).await?;
 
@@ -203,10 +206,7 @@ where
         Ok(decoded_outputs)
     }
 
-    async fn get_decoded_outputs(
-        storage: &S,
-        room_id: &uuid::Uuid,
-    ) -> Result<Vec<utxo::types::Output>> {
+    async fn get_decoded_outputs(storage: &S, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
         let room = Self::room_by_id(storage, room_id).await?;
 
         if room.current_round != room.participants.len() {
@@ -225,11 +225,8 @@ where
 
         let decoded_outputs = outputs
             .into_iter()
-            .map(|output| utxo::types::Output {
-                amount: room.amount,
-                owner: Address::from_slice(&output),
-            })
-            .collect::<Vec<utxo::types::Output>>();
+            .map(|output| Address::from_slice(&output))
+            .collect::<Vec<Address>>();
 
         Ok(decoded_outputs)
     }
@@ -269,12 +266,19 @@ where
         Ok(())
     }
 
-    pub async fn send_begin(&self, room_id: &uuid::Uuid) -> Result<Hash> {
+    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
         // let tx = self.storage.begin().await?;
 
-        let outputs = Self::get_decoded_outputs(&self.storage, room_id).await?;
-
         let room = Self::room_by_id(&self.storage, room_id).await?;
+
+        let outputs = Self::get_decoded_outputs(&self.storage, room_id)
+            .await?
+            .iter()
+            .map(|output| utxo::types::Output {
+                owner: *output,
+                amount: room.amount,
+            })
+            .collect::<Vec<utxo::types::Output>>();
 
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
