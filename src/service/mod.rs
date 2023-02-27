@@ -143,11 +143,12 @@ where
         Ok(encoded_outputs)
     }
 
+    ///
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         let tx = self.storage.transaction().await?;
 
         let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
@@ -167,7 +168,9 @@ where
             _ => return Err(Error::InvalidRound),
         };
 
-        tx.update_room_round(&room.id, room.current_round + 1)
+        let new_round = room.current_round + 1;
+
+        tx.update_room_round(&room.id, new_round)
             .await
             .map_err(|e| Error::Storage(e.into()))?;
 
@@ -180,7 +183,7 @@ where
 
         tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
-        Ok(())
+        Ok(new_round)
     }
 
     /// If shuffle is finished, return all outputs that each participant should sign.
