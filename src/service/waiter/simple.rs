@@ -39,7 +39,7 @@ where
     async fn organize(&self, token: &Address, amount: &U256) -> Result<Vec<Room>, Error> {
         let mut rooms = Vec::new();
 
-        let tx = self.storage.transaction().await.map_err(Error::Storage)?;
+        let tx = self.storage.begin().await.map_err(Error::Storage)?;
 
         // TODO: remake it to for loop
         loop {

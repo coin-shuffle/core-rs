@@ -87,7 +87,7 @@ where
 
     /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
     pub async fn participant_keys(&self, participant_id: &U256) -> Result<Vec<RsaPublicKey>> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
 
@@ -114,7 +114,7 @@ where
 
     /// Return outputs that given participant should decrypt.
     pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOutput>> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let (room, _participant) = Self::room_and_participant(&tx, participant_id).await?;
 
@@ -148,7 +148,7 @@ where
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
     ) -> Result<()> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
 
@@ -185,7 +185,7 @@ where
 
     /// If shuffle is finished, return all outputs that each participant should sign.
     pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<utxo::types::Output>> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let decoded_outputs = Self::get_decoded_outputs(&tx, room_id).await?;
 
@@ -230,7 +230,7 @@ where
         participant_id: &U256,
         signature: Signature,
     ) -> Result<()> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let (room, participant) = Self::room_and_participant(&tx, participant_id).await?;
 
@@ -259,8 +259,8 @@ where
         Ok(())
     }
 
-    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
-        let tx = self.storage.transaction().await?;
+    pub async fn send_begin(&self, room_id: &uuid::Uuid) -> Result<Hash> {
+        let tx = self.storage.begin().await?;
 
         let outputs = Self::get_decoded_outputs(&tx, room_id).await?;
 
@@ -345,7 +345,7 @@ where
 
     /// check that all participants in the room passed signed inputs with outputs
     pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool> {
-        let tx = self.storage.transaction().await?;
+        let tx = self.storage.begin().await?;
 
         let room = Self::room_by_id(&tx, room_id).await?;
 

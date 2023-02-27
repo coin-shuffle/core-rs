@@ -12,7 +12,7 @@ pub trait Storage:
 {
     type Transaction: Transaction<Storage = Self> + Send + Sync;
 
-    async fn transaction(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
+    async fn begin(&self) -> Result<TransactionGuard<Self::Transaction>, Error>;
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -29,10 +29,8 @@ pub enum Error {
 
 /// Transaction - represents storage transaction logic.
 #[async_trait]
-pub trait Transaction: Send + Sync {
+pub trait Transaction: Deref<Target = Self::Storage> + Send + Sync {
     type Storage: Storage;
-
-    fn storage(&self) -> &Self::Storage;
 
     /// rollback is called on `transaction` dropping
     async fn rollback(&self) -> Result<(), TransactionError>;
@@ -78,7 +76,7 @@ where
     type Target = T::Storage;
 
     fn deref(&self) -> &Self::Target {
-        self.inner.storage()
+        self.inner.deref()
     }
 }
 
