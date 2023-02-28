@@ -96,7 +96,7 @@ where
 
         let mut keys = Vec::with_capacity(room.participants.len() - position);
 
-        for participant_id in room.participants.iter().skip(position) {
+        for participant_id in room.participants.iter().skip(position + 1) {
             let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
             let key = participant.rsa_pubkey.ok_or(Error::NoRSAPubKey)?;
