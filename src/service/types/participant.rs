@@ -1,4 +1,4 @@
-use coin_shuffle_contracts_bindings::utxo::types::Input;
+use coin_shuffle_contracts_bindings::utxo::types::{Input, Output};
 use ethers_core::{abi::Hash, types::U256};
 use rsa::RsaPublicKey;
 
@@ -15,7 +15,7 @@ pub enum ShuffleRound {
     /// Decoded by participant outputs.
     DecodedOutputs(Vec<EncodedOutput>),
     /// Participant signs the decoded outputs and his input
-    SigningOutput(Input),
+    SigningOutput(Input, Vec<Output>),
     /// Participant received the transaction hash
     Finish(Hash),
 }

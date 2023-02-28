@@ -250,13 +250,25 @@ where
             return Err(Error::InvalidRound);
         }
 
+        let outputs = Self::get_decoded_outputs(&self.storage, &room.id)
+            .await?
+            .iter()
+            .map(|output| utxo::types::Output {
+                owner: *output,
+                amount: room.amount,
+            })
+            .collect::<Vec<utxo::types::Output>>();
+
         self.storage
             .update_participant_round(
                 participant_id,
-                ShuffleRound::SigningOutput(utxo::types::Input {
-                    signature: signature.as_bytes().to_vec().into(),
-                    id: *participant_id,
-                }),
+                ShuffleRound::SigningOutput(
+                    utxo::types::Input {
+                        signature: signature.as_bytes().to_vec().into(),
+                        id: *participant_id,
+                    },
+                    outputs,
+                ),
             )
             .await
             .map_err(|e| Error::Storage(e.into()))?;
@@ -271,27 +283,22 @@ where
 
         let room = Self::room_by_id(&self.storage, room_id).await?;
 
-        let outputs = Self::get_decoded_outputs(&self.storage, room_id)
-            .await?
-            .iter()
-            .map(|output| utxo::types::Output {
-                owner: *output,
-                amount: room.amount,
-            })
-            .collect::<Vec<utxo::types::Output>>();
-
-        // if room.current_round != room.participants.len() {
-        //     return Err(Error::InvalidRound);
-        // }
+        if room.current_round != room.participants.len() {
+            return Err(Error::InvalidRound);
+        }
 
         let mut inputs = Vec::with_capacity(room.participants.len());
+
+        let mut outputs = vec![];
 
         for participant_id in room.participants.iter() {
             let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
-            let ShuffleRound::SigningOutput(input) = participant.status else {
+            let ShuffleRound::SigningOutput(input, outputs_) = participant.status else {
                 return Err(Error::InvalidStatus);
             };
+
+            outputs = outputs_;
 
             inputs.push(input);
         }
@@ -371,7 +378,7 @@ where
         for participant_id in room.participants.iter() {
             let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
-            let ShuffleRound::SigningOutput(_) = participant.status else {
+            let ShuffleRound::SigningOutput(..) = participant.status else {
                 return Ok(false);
             };
         }
