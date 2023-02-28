@@ -4,7 +4,7 @@ use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
 use ethers_core::abi::AbiEncode;
 use ethers_core::types::U256;
-use ethers_core::utils::hex;
+use ethers_core::utils::{hex, keccak256};
 use ethers_signers::{LocalWallet, Signer, WalletError};
 
 pub mod room;
@@ -193,9 +193,9 @@ where
 
         let signed_message = room
             .ecdsa_private_key
-            .sign_message(sign_message)
+            .sign_message(keccak256(sign_message))
             .await?
-            .to_vec();;
+            .to_vec();
 
         log::info!("{}", hex::encode(signed_message.clone()));
 
