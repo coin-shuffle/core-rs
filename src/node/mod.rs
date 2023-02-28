@@ -4,6 +4,7 @@ use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
 use ethers_core::abi::AbiEncode;
 use ethers_core::types::U256;
+use ethers_core::utils::hex;
 use ethers_signers::{LocalWallet, Signer, WalletError};
 
 pub mod room;
@@ -188,7 +189,7 @@ where
             log::info!("{:?}", sign_message);
         }
 
-        log::info!("{}", sign_message.clone().encode_hex());
+        log::info!("{}", hex::encode(sign_message.clone()));
 
         Ok(room
             .ecdsa_private_key
