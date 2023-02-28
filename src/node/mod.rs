@@ -2,6 +2,7 @@ use self::{room::Room, storage::Outputs};
 use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
+use ethers_core::abi::AbiEncode;
 use ethers_core::types::U256;
 use ethers_signers::{LocalWallet, Signer, WalletError};
 
@@ -177,11 +178,17 @@ where
             Err(Error::IncorrectOutputsSize)?;
         };
 
-        let mut sign_message = room.utxo.id.to_string().as_bytes().to_vec();
+        let mut sign_message = room.utxo.id.encode();
+
+        log::info!("{:?}", sign_message);
 
         for mut output in outputs.clone() {
-            sign_message.append(&mut output)
+            sign_message.append(&mut room.utxo.amount.encode());
+            sign_message.append(&mut output);
+            log::info!("{:?}", sign_message);
         }
+
+        log::info!("{}", sign_message.clone().encode_hex());
 
         Ok(room
             .ecdsa_private_key

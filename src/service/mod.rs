@@ -4,6 +4,7 @@ pub mod types;
 pub mod waiter;
 
 use coin_shuffle_contracts_bindings::utxo;
+use coin_shuffle_contracts_bindings::utxo::types::Output;
 use ethers_core::{
     abi::{ethereum_types::Signature, Hash},
     types::{Address, U256},
@@ -266,23 +267,16 @@ where
         Ok(())
     }
 
-    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
+    pub async fn send_transaction(&self, room_id: &uuid::Uuid, outputs: Vec<Output>) -> Result<Hash> {
         // let tx = self.storage.begin().await?;
 
         let room = Self::room_by_id(&self.storage, room_id).await?;
 
-        let outputs = Self::get_decoded_outputs(&self.storage, room_id)
-            .await?
-            .iter()
-            .map(|output| utxo::types::Output {
-                owner: *output,
-                amount: room.amount,
-            })
-            .collect::<Vec<utxo::types::Output>>();
+        if room.current_round != room.participants.len() {
+            return Err(Error::InvalidRound);
+        }
 
-        // if room.current_round != room.participants.len() {
-        //     return Err(Error::InvalidRound);
-        // }
+        log::info!("{}", room_id);
 
         let mut inputs = Vec::with_capacity(room.participants.len());
 
