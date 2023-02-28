@@ -280,9 +280,9 @@ where
             })
             .collect::<Vec<utxo::types::Output>>();
 
-        if room.current_round != room.participants.len() {
-            return Err(Error::InvalidRound);
-        }
+        // if room.current_round != room.participants.len() {
+        //     return Err(Error::InvalidRound);
+        // }
 
         let mut inputs = Vec::with_capacity(room.participants.len());
 
