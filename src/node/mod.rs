@@ -191,10 +191,14 @@ where
 
         log::info!("{}", hex::encode(sign_message.clone()));
 
-        Ok(room
+        let mut signed_message = room
             .ecdsa_private_key
             .sign_message(sign_message)
             .await?
-            .to_vec())
+            .to_vec();
+
+        signed_message[64] += 27;
+
+        Ok(signed_message)
     }
 }
