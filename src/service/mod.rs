@@ -279,7 +279,7 @@ where
         Ok(())
     }
 
-    pub async fn send_transaction(&self, room_id: &uuid::Uuid, outputs: Vec<Output>) -> Result<Hash> {
+    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
         // let tx = self.storage.begin().await?;
 
         let room = Self::room_by_id(&self.storage, room_id).await?;
