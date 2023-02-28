@@ -280,6 +280,7 @@ where
             })
             .collect::<Vec<utxo::types::Output>>();
 
+        println!("HEEEEEREEEEEEEEEE {}, {}", room.current_round, room.participants.len());
         if room.current_round != room.participants.len() {
             return Err(Error::InvalidRound);
         }
@@ -289,6 +290,7 @@ where
         for participant_id in room.participants.iter() {
             let participant = Self::participant_by_id(&self.storage, participant_id).await?;
 
+            println!("{:?}", participant.status);
             let ShuffleRound::SigningOutput(input) = participant.status else {
                 return Err(Error::InvalidRound);
             };
