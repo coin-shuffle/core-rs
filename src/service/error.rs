@@ -1,3 +1,4 @@
+use crate::service::types::ShuffleRound;
 use super::storage;
 use super::waiter;
 
@@ -15,6 +16,8 @@ pub enum Error {
     RoomNotFound,
     #[error("Invalid round")]
     InvalidRound,
+    #[error("Invalid status")]
+    InvalidStatus,
     #[error("Invalid number of outputs")]
     InvalidNumberOfOutputs,
     #[error("Invalid number of participants")]
