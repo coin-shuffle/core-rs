@@ -106,7 +106,7 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        if self.nonce.is_empty() {
+        if !self.nonce.is_empty() {
             dest.copy_from_slice(self.nonce.as_slice());
             return;
         }
