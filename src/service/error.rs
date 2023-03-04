@@ -1,6 +1,6 @@
-use crate::service::types::ShuffleRound;
 use super::storage;
 use super::waiter;
+use crate::service::types::ShuffleRound;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

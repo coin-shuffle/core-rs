@@ -4,17 +4,20 @@ use crate::{node::storage::RoomStorage, rsa};
 use coin_shuffle_contracts_bindings::utxo::Contract;
 use ethers_core::abi::AbiEncode;
 use ethers_core::types::U256;
-use ethers_core::utils::{hex, keccak256};
-use ethers_signers::{LocalWallet, Signer, WalletError};
+use ethers_core::utils::keccak256;
+use signer::Signer;
+use std::marker::PhantomData;
 
 pub mod room;
+pub mod signer;
 pub mod storage;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error<E, R>
+pub enum Error<E, R, S>
 where
     E: std::error::Error,
     R: std::error::Error,
+    S: std::error::Error,
 {
     #[error("utxo doesn't exist id: {0}")]
     UtxoDoesntExist(U256),
@@ -39,7 +42,7 @@ where
     #[error("incorrect signing data: self outputs is absent")]
     SelfOutputsIsAbsent,
     #[error("failed to sing the message: {0}")]
-    SignMessage(#[from] WalletError),
+    SignMessage(#[from] S),
 }
 
 #[derive(Debug, Clone)]
@@ -49,20 +52,23 @@ pub struct ShuffleRoundResult {
 }
 
 #[derive(Debug, Clone)]
-pub struct Node<R: RoomStorage, C> {
+pub struct Node<S: Signer + Clone + Send + Sync, R: RoomStorage<S>, C: Contract> {
     room_storage: R,
     utxo_conn: C,
+    phantom_data: PhantomData<S>,
 }
 
-impl<R, C> Node<R, C>
+impl<S, R, C> Node<S, R, C>
 where
-    R: RoomStorage,
+    R: RoomStorage<S>,
     C: Contract,
+    S: Signer + Clone + Send + Sync,
 {
     pub fn new(room_storage: R, utxo_conn: C) -> Self {
         Self {
             room_storage,
             utxo_conn,
+            phantom_data: Default::default(),
         }
     }
 
@@ -71,8 +77,8 @@ where
         utxo_id: U256,
         output: Vec<u8>,
         rsa_private_key: RsaPrivateKey,
-        ecdsa_private_key: LocalWallet,
-    ) -> Result<Room, Error<C::Error, R::Error>> {
+        signer: S,
+    ) -> Result<Room<S>, Error<C::Error, R::Error, S::Error>> {
         let utxo = self
             .utxo_conn
             .get_utxo_by_id(utxo_id)
@@ -80,7 +86,7 @@ where
             .map_err(Error::UtxoConnector)?
             .ok_or(Error::UtxoDoesntExist(utxo_id))?;
 
-        let room = Room::new(utxo, rsa_private_key, ecdsa_private_key, output);
+        let room = Room::new(utxo, rsa_private_key, signer, output);
 
         self.room_storage
             .insert(&room)
@@ -94,7 +100,7 @@ where
         &mut self,
         public_keys: Vec<RsaPublicKey>,
         utxo_id: U256,
-    ) -> Result<(), Error<C::Error, R::Error>> {
+    ) -> Result<(), Error<C::Error, R::Error, S::Error>> {
         if let Some(mut room_inner) = self
             .room_storage
             .get(&utxo_id)
@@ -116,7 +122,7 @@ where
         &mut self,
         encoded_outputs: Outputs,
         utxo_id: U256,
-    ) -> Result<Outputs, Error<C::Error, R::Error>> {
+    ) -> Result<Outputs, Error<C::Error, R::Error, S::Error>> {
         //
         // todo validate encoded outputs size
         //
@@ -163,7 +169,7 @@ where
         &self,
         utxo_id: U256,
         outputs: Outputs,
-    ) -> Result<Vec<u8>, Error<C::Error, R::Error>> {
+    ) -> Result<Vec<u8>, Error<C::Error, R::Error, S::Error>> {
         let room = self
             .room_storage
             .get(&utxo_id)
@@ -181,23 +187,16 @@ where
 
         let mut sign_message = room.utxo.id.encode();
 
-        log::info!("{:?}", sign_message);
-
         for mut output in outputs.clone() {
             sign_message.append(&mut room.utxo.amount.encode());
             sign_message.append(&mut output);
-            log::info!("{:?}", sign_message);
         }
 
-        log::info!("{}", hex::encode(sign_message.clone()));
-
         let signed_message = room
-            .ecdsa_private_key
+            .signer
             .sign_message(keccak256(sign_message))
             .await?
             .to_vec();
-
-        log::info!("{}", hex::encode(signed_message.clone()));
 
         Ok(signed_message)
     }
