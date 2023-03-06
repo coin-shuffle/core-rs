@@ -221,7 +221,7 @@ where
         .await?;
 
         let ShuffleRound::DecodedOutputs(outputs) = last_participant.status else {
-            return Err(Error::InvalidRound);
+            return Err(Error::InvalidStatus);
         };
 
         let decoded_outputs = outputs
@@ -244,7 +244,7 @@ where
         // check that previous status is DecodedOutputs
         match participant.status {
             ShuffleRound::DecodedOutputs(_) => {}
-            _ => return Err(Error::InvalidRound),
+            _ => return Err(Error::InvalidStatus),
         };
 
         if room.current_round != room.participants.len() {
@@ -252,13 +252,13 @@ where
         }
 
         let outputs = Self::get_decoded_outputs(&self.storage, &room.id)
-            .await?
+            .await.context("failed to get decoded outputs")?
             .iter()
-            .map(|output| utxo::types::Output {
+            .map(|output| Output {
                 owner: *output,
                 amount: room.amount,
             })
-            .collect::<Vec<utxo::types::Output>>();
+            .collect::<Vec<Output>>();
 
         self.storage
             .update_participant_round(
