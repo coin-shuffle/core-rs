@@ -28,6 +28,6 @@ pub enum Error {
     Waiter(#[from] waiter::Error),
     #[error("No RSA pub key")]
     NoRSAPubKey,
-    #[error("failed to get decoded outputs")]
-    GetDecodedOutputs(Box<dyn std::error::Error>),
+    #[error("failed to get decoded outputs: {0}")]
+    GetDecodedOutputs(String),
 }

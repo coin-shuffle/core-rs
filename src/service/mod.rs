@@ -253,7 +253,7 @@ where
 
         let outputs = Self::get_decoded_outputs(&self.storage, &room.id)
             .await.map_err(|err| {
-            Error::GetDecodedOutputs(Box::new(err))
+            Error::GetDecodedOutputs(err.to_string())
         })?
             .iter()
             .map(|output| Output {
