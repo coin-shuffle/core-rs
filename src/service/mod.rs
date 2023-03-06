@@ -252,7 +252,9 @@ where
         }
 
         let outputs = Self::get_decoded_outputs(&self.storage, &room.id)
-            .await.context("failed to get decoded outputs")?
+            .await.map_err(|err| {
+            Error::GetDecodedOutputs(Box::new(err))
+        })?
             .iter()
             .map(|output| Output {
                 owner: *output,
