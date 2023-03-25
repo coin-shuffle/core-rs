@@ -1,11 +1,7 @@
-use super::storage;
-use super::waiter;
-use crate::service::types::ShuffleRound;
+use ethers_core::abi::AbiError;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    #[error("Storage error: {0}")]
-    Storage(#[from] storage::Error),
     #[error("Participant not found")]
     ParticipantNotFound,
     #[error("Participant already in room")]
@@ -24,10 +20,10 @@ pub enum Error {
     InvalidNumberOfParticipants,
     #[error("Failed to create transfer")]
     Transfer(String),
-    #[error("Waiter error: {0}")]
-    Waiter(#[from] waiter::Error),
     #[error("No RSA pub key")]
     NoRSAPubKey,
     #[error("failed to get decoded outputs: {0}")]
     GetDecodedOutputs(String),
+    #[error("invalid outputs: {0}")]
+    InvalidOutputs(AbiError),
 }

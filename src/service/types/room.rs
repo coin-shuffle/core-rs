@@ -1,4 +1,27 @@
-use ethers_core::types::{Address, U256};
+use std::collections::BTreeSet;
+
+use coin_shuffle_contracts_bindings::utxo::types::Output;
+use ethers_core::{
+    abi::Hash,
+    types::{Address, U256},
+};
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum State {
+    /// None of the users are connected to the room.
+    Waiting,
+    /// Users are connecting to the room by sending their public keys.
+    /// The set contains all the users that are connected to the room.
+    Connecting(BTreeSet<U256>),
+    /// Current shuffle round number of the room.
+    Shuffle(usize),
+    /// Decoded outputs of the last user in the shuffle process with UTXO's
+    /// that already passed their signature of the outputs.
+    Signatures((Vec<Output>, Vec<U256>)),
+    /// Hash of the transaction that is going to be sent to the blockchain.
+    TransactionHash(Hash),
+}
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
@@ -6,7 +29,7 @@ pub struct Room {
     pub id: uuid::Uuid,
     pub token: Address,
     pub amount: U256,
-    pub current_round: usize,
+    pub state: State,
 
     /// List of all UTXO that are participating in the room.
     /// Order in this vector represents the order which user participating
@@ -24,7 +47,7 @@ impl Room {
             id,
             token,
             amount,
-            current_round: 0,
+            state: State::Waiting,
             participants,
         }
     }
