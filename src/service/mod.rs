@@ -17,13 +17,13 @@ pub type ServiceResult<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
 pub struct Service {
-    storage: inmemory::Storage,
+    storage: inmemory::ServiceStorage,
 }
 
 impl Service {
     pub fn new() -> Self {
         Self {
-            storage: inmemory::Storage::new(),
+            storage: inmemory::ServiceStorage::new(),
         }
     }
 

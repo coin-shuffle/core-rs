@@ -1,19 +1,18 @@
+use ethers_core::types::U256;
+
 mod participants;
-mod queues;
 mod rooms;
 
 #[derive(Clone)]
-pub struct Storage {
+pub struct ServiceStorage {
     participants: participants::ParticipantsStorage,
-    queues: queues::QueuesStorage,
     rooms: rooms::RoomsStorage,
 }
 
-impl Storage {
+impl ServiceStorage {
     pub fn new() -> Self {
         Self {
             participants: participants::ParticipantsStorage::new(),
-            queues: queues::QueuesStorage::new(),
             rooms: rooms::RoomsStorage::new(),
         }
     }
@@ -22,25 +21,25 @@ impl Storage {
         &self.participants
     }
 
-    pub fn queues(&self) -> &queues::QueuesStorage {
-        &self.queues
-    }
-
     pub fn rooms(&self) -> &rooms::RoomsStorage {
         &self.rooms
     }
 
-    pub async fn clear_room(&self, room: uuid::Uuid) {
+    /// Delete room, participants instances in storage and return deleted participants
+    /// UTXO ids
+    pub async fn clear_room(&self, room: uuid::Uuid) -> Vec<U256> {
         let room = self.rooms.get(room).await;
 
         if let Some(room) = room {
             self.rooms.delete(room.id).await;
 
-            for participant in room.participants {
-                self.participants.delete(participant).await;
-
-                self.queues.push(room.token, room.amount, participant).await;
+            for participant in room.participants.iter() {
+                self.participants.delete(*participant).await;
             }
+
+            return room.participants;
         }
+
+        vec![]
     }
 }
