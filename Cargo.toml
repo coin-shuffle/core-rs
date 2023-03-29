@@ -20,6 +20,8 @@ async-trait = { version = "0.1.64" }
 uuid        = { version = "1.3.0",   features = ["v4", "fast-rng"] }
 thiserror   = { version = "1.0.38" }
 log = "0.4.17"
+ethers-core = { version = "2" }
+ethers-signers = { version = "2" }
 
 [dependencies.tokio]
 version = "1.25"
@@ -30,14 +32,6 @@ features = ["sync"]
 version = "1.0.124"
 features = ["derive"]
 optional = true
-
-[dependencies.ethers-core]
-git = "https://github.com/gakonst/ethers-rs.git"
-branch = "master"
-
-[dependencies.ethers-signers]
-git = "https://github.com/gakonst/ethers-rs.git"
-branch = "master"
 
 [dependencies.coin-shuffle-contracts-bindings]
 git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
