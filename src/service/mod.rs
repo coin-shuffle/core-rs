@@ -299,4 +299,14 @@ impl Service {
 
         Ok(None)
     }
+
+    /// Get participant by id.
+    pub async fn get_participant(&self, participant_id: &U256) -> Option<Participant> {
+        self.storage.participants().get(*participant_id).await
+    }
+
+    /// Get room by id.
+    pub async fn get_room(&self, room_id: &uuid::Uuid) -> Option<Room> {
+        self.storage.rooms().get(*room_id).await
+    }
 }
