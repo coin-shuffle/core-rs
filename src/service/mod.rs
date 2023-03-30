@@ -259,14 +259,13 @@ impl Service {
 
     /// Pass signature of the output and store it in the storage.
     ///
-    /// If all participants passed their signatures, return all signatures and inputs,
-    /// delete room and participants from the storage.
+    /// If all participants passed their signatures, return all inputs and outputs.
     pub async fn pass_signature(
         &self,
         room_id: &uuid::Uuid,
         participant_id: &U256,
         signature: Signature,
-    ) -> ServiceResult<Option<(Vec<Input>, Vec<Signature>)>> {
+    ) -> ServiceResult<Option<(Vec<Output>, Vec<Input>)>> {
         let room = self.room_by_id(room_id).await?;
         let position = Self::participant_position(&room, participant_id)?;
 
@@ -282,24 +281,39 @@ impl Service {
             return Err(Error::InvalidStatus);
         };
 
-        self.update_participant_state(
-            participant_id,
-            ParticipantState::SigningOutput(Input {
-                id: participant.utxo_id,
-                signature: Bytes::from(signature.as_bytes().to_vec()),
-            }),
-        )
-        .await;
+        if passed.len() != position {
+            return Ok(None);
+        }
         passed.push(*participant_id);
 
-        if passed.len() != position + 1 {
+        let input = Input {
+            id: participant.utxo_id,
+            signature: Bytes::from(signature.as_bytes().to_vec()),
+        };
+
+        self.update_participant_state(participant_id, ParticipantState::SigningOutput(input))
+            .await;
+
+        let participants_passed = passed.len();
+
+        self.update_room_state(&room.id, RoomState::Signatures((outputs.clone(), passed)))
+            .await;
+
+        if participants_passed != room.participants.len() {
             return Ok(None);
         }
 
-        self.update_room_state(&room.id, RoomState::Signatures((outputs, passed)))
-            .await;
+        let mut inputs = Vec::new();
+        for participant_id in room.participants {
+            let participant = self.participant_by_id(&participant_id).await?;
+            let ParticipantState::SigningOutput(input) = participant.state else {
+                return Err(Error::InvalidStatus);
+            };
 
-        Ok(None)
+            inputs.push(input);
+        }
+
+        Ok(Some((outputs, inputs)))
     }
 
     /// Get participant by id.
@@ -310,6 +324,19 @@ impl Service {
     /// Get room by id.
     pub async fn get_room(&self, room_id: &uuid::Uuid) -> Option<Room> {
         self.storage.rooms().get(*room_id).await
+    }
+
+    /// Clear room and participants from the storage.
+    pub async fn clear_room(&self, room_id: &uuid::Uuid) {
+        let Some(room) = self.get_room(room_id).await else {
+            return;
+        };
+
+        for participant_id in room.participants {
+            self.storage.participants().delete(participant_id).await;
+        }
+
+        self.storage.rooms().delete(room.id).await;
     }
 }
 
