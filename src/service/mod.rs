@@ -20,6 +20,12 @@ pub struct Service {
     storage: inmemory::ServiceStorage,
 }
 
+impl Default for Service {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Service {
     pub fn new() -> Self {
         Self {
@@ -34,6 +40,13 @@ impl Service {
 
         self.storage.rooms().insert(room.clone()).await;
 
+        for participant in room.participants.iter() {
+            self.storage
+                .participants()
+                .insert(Participant::new(*participant, room.id))
+                .await;
+        }
+
         room
     }
 
@@ -42,17 +55,18 @@ impl Service {
     /// the message for given room and participant.
     pub async fn connect_participant(
         &self,
-        room_id: &uuid::Uuid,
         participant_id: &U256,
         rsa_pubkey: RsaPublicKey,
     ) -> ServiceResult<Option<HashMap<U256, Vec<RsaPublicKey>>>> {
-        let room = self.room_by_id(room_id).await?;
+        let participant = self.participant_by_id(participant_id).await?;
+
+        let room = self.room_by_id(&participant.room_id).await?;
         if !room.participants.contains(participant_id) {
             return Err(Error::ParticipantNotInRoom);
         }
-        let participant = Participant::new(*participant_id, *room_id, rsa_pubkey.clone());
 
-        self.storage.participants().insert(participant).await;
+        self.update_participant_state(participant_id, ParticipantState::Start(rsa_pubkey))
+            .await;
 
         let connected = match room.state {
             RoomState::Waiting => {
@@ -70,11 +84,12 @@ impl Service {
         if connected.len() == room.participants.len() {
             let keys = self.distribute_keys(room.participants).await?;
 
-            self.update_room_state(room_id, RoomState::Shuffle(0)).await;
+            self.update_room_state(&room.id, RoomState::Shuffle(0))
+                .await;
             return Ok(Some(keys));
         }
 
-        self.update_room_state(room_id, RoomState::Connecting(connected))
+        self.update_room_state(&room.id, RoomState::Connecting(connected))
             .await;
 
         Ok(None)
@@ -328,15 +343,7 @@ impl Service {
 
     /// Clear room and participants from the storage.
     pub async fn clear_room(&self, room_id: &uuid::Uuid) {
-        let Some(room) = self.get_room(room_id).await else {
-            return;
-        };
-
-        for participant_id in room.participants {
-            self.storage.participants().delete(participant_id).await;
-        }
-
-        self.storage.rooms().delete(room.id).await;
+        self.storage.clear_room(room_id).await;
     }
 }
 

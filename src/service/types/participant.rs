@@ -8,6 +8,8 @@ use super::EncodedOutput;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
+    /// Participant havn't started the process of shuffle, but room is created.
+    Wait,
     /// Shuffle started, the participant receiving RSA public
     /// keys, that are required for shuffle process.
     Start(RsaPublicKey),
@@ -28,11 +30,11 @@ pub struct Participant {
 }
 
 impl Participant {
-    pub fn new(utxo_id: U256, room_id: Uuid, key: RsaPublicKey) -> Self {
+    pub fn new(utxo_id: U256, room_id: Uuid) -> Self {
         Self {
             room_id,
             utxo_id,
-            state: State::Start(key),
+            state: State::Wait,
         }
     }
 }

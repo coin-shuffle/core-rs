@@ -11,6 +11,12 @@ pub struct RoomsStorage {
     rooms: Arc<Mutex<HashMap<Uuid, Room>>>,
 }
 
+impl Default for RoomsStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoomsStorage {
     pub fn new() -> Self {
         Self {

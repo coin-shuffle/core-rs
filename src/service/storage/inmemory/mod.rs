@@ -27,8 +27,8 @@ impl ServiceStorage {
 
     /// Delete room, participants instances in storage and return deleted participants
     /// UTXO ids
-    pub async fn clear_room(&self, room: uuid::Uuid) -> Vec<U256> {
-        let room = self.rooms.get(room).await;
+    pub async fn clear_room(&self, room: &uuid::Uuid) -> Vec<U256> {
+        let room = self.rooms.get(*room).await;
 
         if let Some(room) = room {
             self.rooms.delete(room.id).await;
@@ -41,5 +41,11 @@ impl ServiceStorage {
         }
 
         vec![]
+    }
+}
+
+impl Default for ServiceStorage {
+    fn default() -> Self {
+        Self::new()
     }
 }

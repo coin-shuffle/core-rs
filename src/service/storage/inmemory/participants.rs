@@ -11,6 +11,12 @@ pub struct ParticipantsStorage {
     participants: Arc<Mutex<HashMap<U256, Participant>>>,
 }
 
+impl Default for ParticipantsStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ParticipantsStorage {
     pub fn new() -> Self {
         Self {
