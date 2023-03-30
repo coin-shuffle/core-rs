@@ -295,10 +295,6 @@ impl Service {
         let ParticipantState::DecodedOutputs(_) = participant.state else {
             return Err(Error::InvalidStatus);
         };
-
-        if passed.len() != position {
-            return Ok(None);
-        }
         passed.push(*participant_id);
 
         let input = Input {
