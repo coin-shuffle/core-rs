@@ -182,13 +182,14 @@ impl Service {
 
     /// Path decoded by participant outputs and store them in the storage.
     ///
-    /// If all participants decoded their outputs, the start signature accertion process
-    /// and return outputs that should be signed.
+    /// If participant is the last one in the room, then return [`PassDecodedOutputsResult::Finished`].
+    /// Otherwise, return [`PassDecodedOutputsResult::Round`] with position of the next participant in
+    /// the room.
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
-    ) -> ServiceResult<Option<Vec<Output>>> {
+    ) -> ServiceResult<PassDecodedOutputsResult> {
         let participant = self.participant_by_id(participant_id).await?;
         let room = self.room_by_id(&participant.room_id).await?;
 
@@ -223,11 +224,12 @@ impl Service {
                 RoomState::Signatures((outputs.clone(), Vec::new())),
             )
             .await;
-            Some(outputs)
+            PassDecodedOutputsResult::Finished(outputs)
         } else {
-            self.update_room_state(&room.id, RoomState::Shuffle(current_round + 1))
+            let current_round = current_round + 1;
+            self.update_room_state(&room.id, RoomState::Shuffle(current_round))
                 .await;
-            None
+            PassDecodedOutputsResult::Round(current_round)
         };
 
         self.update_participant_state(
@@ -309,4 +311,12 @@ impl Service {
     pub async fn get_room(&self, room_id: &uuid::Uuid) -> Option<Room> {
         self.storage.rooms().get(*room_id).await
     }
+}
+
+/// Result of the `pass_decoded_outputs` method.
+pub enum PassDecodedOutputsResult {
+    /// All participants decoded their outputs, so the next step is to sign them.
+    Finished(Vec<Output>),
+    /// Not all participants decoded their outputs, so the next step is to shuffle outputs.
+    Round(usize),
 }
