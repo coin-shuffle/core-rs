@@ -292,7 +292,7 @@ impl Service {
 
         let participant = self.participant_by_id(participant_id).await?;
         // check that previous status is Start
-        let ParticipantState::Start(_) = participant.state else {
+        let ParticipantState::DecodedOutputs(_) = participant.state else {
             return Err(Error::InvalidStatus);
         };
 
