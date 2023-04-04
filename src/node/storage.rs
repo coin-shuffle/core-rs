@@ -1,3 +1,4 @@
+use crate::node::signer::Signer;
 use ethers_core::types::U256;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
@@ -17,22 +18,22 @@ pub type Outputs = Vec<Output>;
 
 /// Storage that is required for the Room storing
 #[async_trait::async_trait]
-pub trait RoomStorage {
+pub trait RoomStorage<S: Signer + Clone + Send + Sync> {
     type Error: std::error::Error;
 
-    async fn insert(&mut self, room: &Room) -> Result<(), Self::Error>;
-    async fn update(&mut self, room: &Room) -> Result<(), Self::Error>;
-    async fn get(&self, utxo_id: &U256) -> Result<Option<Room>, Self::Error>;
-    async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room>, Self::Error>;
+    async fn insert(&mut self, room: &Room<S>) -> Result<(), Self::Error>;
+    async fn update(&mut self, room: &Room<S>) -> Result<(), Self::Error>;
+    async fn get(&self, utxo_id: &U256) -> Result<Option<Room<S>>, Self::Error>;
+    async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room<S>>, Self::Error>;
 }
 
 /// Default realization of the Node's RoomStorage
 #[derive(Debug, Default, Clone)]
-pub struct RoomMemoryStorage {
-    room_list: Arc<Mutex<HashMap<U256, Room>>>,
+pub struct RoomMemoryStorage<S: Signer + Clone + Send + Sync> {
+    room_list: Arc<Mutex<HashMap<U256, Room<S>>>>,
 }
 
-impl RoomMemoryStorage {
+impl<S: Signer + Clone + Send + Sync> RoomMemoryStorage<S> {
     pub fn new() -> Self {
         Self {
             room_list: Arc::new(Mutex::new(HashMap::new())),
@@ -41,10 +42,10 @@ impl RoomMemoryStorage {
 }
 
 #[async_trait::async_trait]
-impl RoomStorage for RoomMemoryStorage {
+impl<S: Signer + Clone + Send + Sync> RoomStorage<S> for RoomMemoryStorage<S> {
     type Error = Error;
 
-    async fn insert(&mut self, room: &Room) -> Result<(), Self::Error> {
+    async fn insert(&mut self, room: &Room<S>) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
         if storage.contains_key(&room.utxo.id) {
@@ -56,7 +57,7 @@ impl RoomStorage for RoomMemoryStorage {
         Ok(())
     }
 
-    async fn update(&mut self, room: &Room) -> Result<(), Self::Error> {
+    async fn update(&mut self, room: &Room<S>) -> Result<(), Self::Error> {
         let mut storage = self.room_list.lock().await;
 
         if !storage.contains_key(&room.utxo.id) {
@@ -68,13 +69,13 @@ impl RoomStorage for RoomMemoryStorage {
         Ok(())
     }
 
-    async fn get(&self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
+    async fn get(&self, utxo_id: &U256) -> Result<Option<Room<S>>, Self::Error> {
         let storage = self.room_list.lock().await;
 
         Ok(storage.get(utxo_id).cloned())
     }
 
-    async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room>, Self::Error> {
+    async fn remove(&mut self, utxo_id: &U256) -> Result<Option<Room<S>>, Self::Error> {
         let mut storage = self.room_list.lock().await;
 
         Ok(storage.remove(utxo_id))

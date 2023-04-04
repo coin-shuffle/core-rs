@@ -1,169 +1,218 @@
 pub mod error;
 pub mod storage;
 pub mod types;
-pub mod waiter;
 
-use coin_shuffle_contracts_bindings::utxo;
-use coin_shuffle_contracts_bindings::utxo::types::Output;
-use ethers_core::{
-    abi::{ethereum_types::Signature, Hash},
-    types::{Address, U256},
-};
+use std::collections::{BTreeSet, HashMap};
+
+use crate::service::types::RoomState;
+use coin_shuffle_contracts_bindings::utxo::types::{Input, Output};
+use ethers_core::abi::ethereum_types::Signature;
+use ethers_core::types::{Address, Bytes, U256};
 use rsa::RsaPublicKey;
 
-use self::error::Error;
-use self::types::{participant::Participant, room::Room, EncodedOutput, ShuffleRound};
+use self::types::{EncodedOutput, Participant, ParticipantState, Room};
+use self::{error::Error, storage::inmemory};
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type ServiceResult<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
-pub struct Service<S, W, C>
-where
-    S: storage::Storage,
-    W: waiter::Waiter,
-    C: utxo::Contract,
-{
-    storage: S,
-    waiter: W,
-    utxo_contract: C,
+pub struct Service {
+    storage: inmemory::ServiceStorage,
 }
 
-impl<S, W, C> Service<S, W, C>
-where
-    S: storage::Storage,
-    W: waiter::Waiter,
-    C: utxo::Contract,
-{
-    pub fn new(storage: S, waiter: W, contract: C) -> Self {
+impl Default for Service {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Service {
+    pub fn new() -> Self {
         Self {
-            storage,
-            waiter,
-            utxo_contract: contract,
+            storage: inmemory::ServiceStorage::new(),
         }
     }
 
-    /// Add participant to the queue for given token and amount.
-    pub async fn add_participant(
-        &self,
-        token: &Address,
-        amount: &U256,
-        participant_id: &U256,
-    ) -> Result<()> {
-        let participant = Participant::new(*participant_id);
+    /// Create room with given participants, where each participant is represented by his UTXO id,
+    /// and return room.
+    pub async fn create_room(&self, token: Address, amount: U256, participants: Vec<U256>) -> Room {
+        let room = Room::new(token, amount, participants);
 
-        self.storage
-            .insert_participant(participant)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
+        self.storage.rooms().insert(room.clone()).await;
 
-        self.waiter
-            .add_to_queue(token, amount, participant_id)
-            .await
-            .map_err(Error::Waiter)?;
-
-        Ok(())
-    }
-
-    /// Remove participants from the queue for given token and amount
-    /// and form rooms for all of them. Return id's of newly created rooms.
-    pub async fn create_rooms(&self, token: &Address, amount: &U256) -> Result<Vec<Room>> {
-        let rooms = self.waiter.organize(token, amount).await?;
-
-        Ok(rooms)
-    }
-
-    /// Add rsa public key to participant
-    pub async fn add_participant_key(
-        &self,
-        participant_id: &U256,
-        key: RsaPublicKey,
-    ) -> Result<()> {
-        self.storage
-            .update_participant_key(participant_id, key)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
-
-        Ok(())
-    }
-
-    /// Return keys that are needed to decrypt and encrypt the message for given room and participant.
-    pub async fn participant_keys(&self, participant_id: &U256) -> Result<Vec<RsaPublicKey>> {
-        // let tx = self.storage.begin().await?;
-
-        let (room, _participant) =
-            Self::room_and_participant(&self.storage, participant_id).await?;
-
-        let position = Self::participant_position(&room, participant_id)?;
-
-        let mut keys = Vec::with_capacity(room.participants.len() - position);
-
-        for participant_id in room.participants.iter().skip(position + 1) {
-            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
-
-            let key = participant.rsa_pubkey.ok_or(Error::NoRSAPubKey)?;
-
-            keys.push(key);
+        for participant in room.participants.iter() {
+            self.storage
+                .participants()
+                .insert(Participant::new(*participant, room.id))
+                .await;
         }
 
-        self.storage
-            .update_participant_round(participant_id, ShuffleRound::Start(keys.clone()))
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
+        room
+    }
 
-        // self.storage
-        //     .commit()
-        //     .await
-        //     .map_err(|e| Error::Storage(e.into()))?;
+    /// Connect participant to the room with passed RSA public key. If all participants are connected,
+    /// then start the shuffling process and return the keys that are needed to decrypt and encrypt
+    /// the message for given room and participant.
+    pub async fn connect_participant(
+        &self,
+        participant_id: &U256,
+        rsa_pubkey: RsaPublicKey,
+    ) -> ServiceResult<Option<HashMap<U256, Vec<RsaPublicKey>>>> {
+        let participant = self.participant_by_id(participant_id).await?;
+
+        let room = self.room_by_id(&participant.room_id).await?;
+        if !room.participants.contains(participant_id) {
+            return Err(Error::ParticipantNotInRoom);
+        }
+
+        self.update_participant_state(participant_id, ParticipantState::Start(rsa_pubkey))
+            .await;
+
+        let connected = match room.state {
+            RoomState::Waiting => {
+                let mut connected = BTreeSet::new();
+                connected.insert(*participant_id);
+                connected
+            }
+            RoomState::Connecting(mut keys) => {
+                keys.insert(*participant_id);
+                keys
+            }
+            _ => return Err(Error::InvalidStatus),
+        };
+
+        if connected.len() == room.participants.len() {
+            let keys = self.distribute_keys(room.participants).await?;
+
+            self.update_room_state(&room.id, RoomState::Shuffle(0))
+                .await;
+            return Ok(Some(keys));
+        }
+
+        self.update_room_state(&room.id, RoomState::Connecting(connected))
+            .await;
+
+        Ok(None)
+    }
+
+    async fn update_room_state(&self, room_id: &uuid::Uuid, state: RoomState) {
+        self.storage.rooms().update_state(*room_id, state).await;
+    }
+
+    async fn room_by_id(&self, room_id: &uuid::Uuid) -> ServiceResult<Room> {
+        self.storage
+            .rooms()
+            .get(*room_id)
+            .await
+            .ok_or(Error::RoomNotFound)
+    }
+
+    async fn participant_by_id(&self, participant_id: &U256) -> ServiceResult<Participant> {
+        self.storage
+            .participants()
+            .get(*participant_id)
+            .await
+            .ok_or(Error::ParticipantNotFound)
+    }
+
+    /// Return a map of RSA public keys for each participant in the room.
+    async fn distribute_keys(
+        &self,
+        participants: Vec<U256>,
+    ) -> ServiceResult<HashMap<U256, Vec<RsaPublicKey>>> {
+        let participants_keys = self
+            .storage
+            .participants()
+            .get_many(&participants)
+            .await
+            .into_iter()
+            .map(|p| {
+                let ParticipantState::Start(key) = p.state else {
+                    return Err(Error::InvalidStatus);
+                };
+                Ok((p.utxo_id, key))
+            })
+            .collect::<ServiceResult<HashMap<U256, RsaPublicKey>>>()?;
+
+        let mut keys = HashMap::new();
+
+        for (position, utxo_id) in participants.iter().enumerate() {
+            let keys_for_participant = participants
+                .iter()
+                // Skip participants that already have the key, `+1`
+                // because we don't want to include the current participant
+                .skip(position + 1)
+                // Reverse to get the keys in order the participant should decrypt
+                .rev()
+                // Get the key for the participant
+                .map(|utxo_id| {
+                    participants_keys
+                        .get(utxo_id)
+                        .cloned()
+                        .ok_or(Error::ParticipantNotFound)
+                })
+                .collect::<ServiceResult<Vec<RsaPublicKey>>>()?;
+
+            keys.insert(*utxo_id, keys_for_participant);
+        }
 
         Ok(keys)
     }
 
     /// Return outputs that given participant should decrypt.
-    pub async fn encoded_outputs(&self, participant_id: &U256) -> Result<Vec<EncodedOutput>> {
-        // let tx = self.storage.begin().await?;
-
-        let (room, _participant) =
-            Self::room_and_participant(&self.storage, participant_id).await?;
+    pub async fn encoded_outputs(
+        &self,
+        participant_id: &U256,
+    ) -> ServiceResult<Vec<EncodedOutput>> {
+        let participant = self.participant_by_id(participant_id).await?;
+        let room = self.room_by_id(&participant.room_id).await?;
 
         let position = Self::participant_position(&room, participant_id)?;
-
-        if position != room.current_round {
-            return Err(Error::InvalidRound);
-        }
-
         // Participant is the first one in the room, so he first adds his encoded outputs
         if position == 0 {
             return Ok(Vec::new());
         }
 
-        let previous_participant_id = room.participants[position - 1];
+        let previous_participant_id = room
+            .participants
+            .get(position - 1)
+            .ok_or(Error::InvalidRound)?;
+        let previous_participant = self.participant_by_id(previous_participant_id).await?;
 
-        let previous_participant =
-            Self::participant_by_id(&self.storage, &previous_participant_id).await?;
-
-        // Get decoded outputs from the previous participant
-        let ShuffleRound::DecodedOutputs(encoded_outputs) = previous_participant.status else {
+        // Get decoded outputs of previous participant and send them to the current one
+        let ParticipantState::DecodedOutputs(encoded_outputs) = previous_participant.state else {
             return Err(Error::InvalidRound);
         };
-
-        // self.storage.commit().await.map_err(|e| Error::Storage(e.into()))?;
 
         Ok(encoded_outputs)
     }
 
+    /// Return position of the participant in the room.
+    fn participant_position(room: &Room, participant_id: &U256) -> ServiceResult<usize> {
+        room.participants
+            .iter()
+            .position(|id| id == participant_id)
+            .ok_or(Error::ParticipantNotFound)
+    }
+
+    /// Path decoded by participant outputs and store them in the storage.
     ///
+    /// If participant is the last one in the room, then return [`PassDecodedOutputsResult::Finished`].
+    /// Otherwise, return [`PassDecodedOutputsResult::Round`] with position of the next participant in
+    /// the room.
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
-    ) -> Result<usize> {
-        // let tx = self.storage.transaction().await?;
-
-        let (room, participant) = Self::room_and_participant(&self.storage, participant_id).await?;
+    ) -> ServiceResult<PassDecodedOutputsResult> {
+        let participant = self.participant_by_id(participant_id).await?;
+        let room = self.room_by_id(&participant.room_id).await?;
 
         let position = Self::participant_position(&room, participant_id)?;
-
-        if position != room.current_round {
+        let RoomState::Shuffle(current_round) = room.state else {
+            return Err(Error::InvalidRound);
+        };
+        if position != current_round {
             return Err(Error::InvalidRound);
         }
         if decoded_outputs.len() != (position + 1) {
@@ -171,219 +220,133 @@ where
         }
 
         // check that previous status is Start
-        match participant.status {
-            ShuffleRound::Start(_) => {}
-            _ => return Err(Error::InvalidRound),
+        let ParticipantState::Start(_) = participant.state else {
+            return Err(Error::InvalidStatus);
         };
 
-        let new_round = room.current_round + 1;
-
-        self.storage
-            .update_room_round(&room.id, new_round)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
-
-        self.storage
-            .update_participant_round(
-                participant_id,
-                ShuffleRound::DecodedOutputs(decoded_outputs),
+        // If participant is the last one in the room, then his outputs are output addresses
+        let outputs = if position == room.participants.len() - 1 {
+            let outputs = decoded_outputs
+                .clone()
+                .into_iter()
+                .map(|o| Output {
+                    amount: room.amount,
+                    owner: Address::from_slice(&o),
+                })
+                .collect::<Vec<Output>>();
+            self.update_room_state(
+                &room.id,
+                RoomState::Signatures((outputs.clone(), Vec::new())),
             )
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
-
-        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
-
-        Ok(new_round)
-    }
-
-    /// If shuffle is finished, return all outputs that each participant should sign.
-    pub async fn decoded_outputs(&self, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
-        // let tx = self.storage.transaction().await?;
-
-        let decoded_outputs = Self::get_decoded_outputs(&self.storage, room_id).await?;
-
-        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
-
-        Ok(decoded_outputs)
-    }
-
-    async fn get_decoded_outputs(storage: &S, room_id: &uuid::Uuid) -> Result<Vec<Address>> {
-        let room = Self::room_by_id(storage, room_id).await?;
-
-        if room.current_round != room.participants.len() {
-            return Err(Error::InvalidRound);
-        }
-
-        let last_participant = Self::participant_by_id(
-            storage,
-            room.participants.last().expect("room can't be empty"),
-        )
-        .await?;
-
-        let ShuffleRound::DecodedOutputs(outputs) = last_participant.status else {
-            return Err(Error::InvalidRound);
+            .await;
+            PassDecodedOutputsResult::Finished(outputs)
+        } else {
+            let current_round = current_round + 1;
+            self.update_room_state(&room.id, RoomState::Shuffle(current_round))
+                .await;
+            PassDecodedOutputsResult::Round(current_round)
         };
 
-        let decoded_outputs = outputs
-            .into_iter()
-            .map(|output| Address::from_slice(&output))
-            .collect::<Vec<Address>>();
+        self.update_participant_state(
+            participant_id,
+            ParticipantState::DecodedOutputs(decoded_outputs),
+        )
+        .await;
 
-        Ok(decoded_outputs)
+        Ok(outputs)
     }
 
-    pub async fn pass_outputs_signature(
+    async fn update_participant_state(&self, participant_id: &U256, state: ParticipantState) {
+        self.storage
+            .participants()
+            .update_state(*participant_id, state)
+            .await;
+    }
+
+    /// Return outputs that given room should sign.
+    pub async fn outputs_to_sign(&self, room_id: &uuid::Uuid) -> ServiceResult<Vec<Output>> {
+        let room = self.room_by_id(room_id).await?;
+        let RoomState::Signatures((outputs, _)) = room.state else {
+            return Err(Error::InvalidStatus);
+        };
+        Ok(outputs)
+    }
+
+    /// Pass signature of the output and store it in the storage.
+    ///
+    /// If all participants passed their signatures, return all inputs and outputs.
+    pub async fn pass_signature(
         &self,
+        room_id: &uuid::Uuid,
         participant_id: &U256,
         signature: Signature,
-    ) -> Result<()> {
-        // let tx = self.storage.begin().await?;
+    ) -> ServiceResult<Option<(Vec<Output>, Vec<Input>)>> {
+        let room = self.room_by_id(room_id).await?;
+        let position = Self::participant_position(&room, participant_id)?;
 
-        let (room, participant) = Self::room_and_participant(&self.storage, participant_id).await?;
-
-        // check that previous status is DecodedOutputs
-        match participant.status {
-            ShuffleRound::DecodedOutputs(_) => {}
-            _ => return Err(Error::InvalidRound),
+        let RoomState::Signatures((outputs, mut passed)) = room.state else {
+            return Err(Error::InvalidStatus);
         };
 
-        if room.current_round != room.participants.len() {
-            return Err(Error::InvalidRound);
+        // TODO: validate signature here
+
+        let participant = self.participant_by_id(participant_id).await?;
+        // check that previous status is Start
+        let ParticipantState::DecodedOutputs(_) = participant.state else {
+            return Err(Error::InvalidStatus);
+        };
+        passed.push(*participant_id);
+
+        let input = Input {
+            id: participant.utxo_id,
+            signature: Bytes::from(signature.as_bytes().to_vec()),
+        };
+
+        self.update_participant_state(participant_id, ParticipantState::SigningOutput(input))
+            .await;
+
+        let participants_passed = passed.len();
+
+        self.update_room_state(&room.id, RoomState::Signatures((outputs.clone(), passed)))
+            .await;
+
+        if participants_passed != room.participants.len() {
+            return Ok(None);
         }
 
-        let outputs = Self::get_decoded_outputs(&self.storage, &room.id)
-            .await?
-            .iter()
-            .map(|output| utxo::types::Output {
-                owner: *output,
-                amount: room.amount,
-            })
-            .collect::<Vec<utxo::types::Output>>();
-
-        self.storage
-            .update_participant_round(
-                participant_id,
-                ShuffleRound::SigningOutput(
-                    utxo::types::Input {
-                        signature: signature.as_bytes().to_vec().into(),
-                        id: *participant_id,
-                    },
-                    outputs,
-                ),
-            )
-            .await
-            .map_err(|e| Error::Storage(e.into()))?;
-
-        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
-
-        Ok(())
-    }
-
-    pub async fn send_transaction(&self, room_id: &uuid::Uuid) -> Result<Hash> {
-        // let tx = self.storage.begin().await?;
-
-        let room = Self::room_by_id(&self.storage, room_id).await?;
-
-        if room.current_round != room.participants.len() {
-            return Err(Error::InvalidRound);
-        }
-
-        let mut inputs = Vec::with_capacity(room.participants.len());
-
-        let mut outputs = vec![];
-
-        for participant_id in room.participants.iter() {
-            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
-
-            let ShuffleRound::SigningOutput(input, outputs_) = participant.status else {
+        let mut inputs = Vec::new();
+        for participant_id in room.participants {
+            let participant = self.participant_by_id(&participant_id).await?;
+            let ParticipantState::SigningOutput(input) = participant.state else {
                 return Err(Error::InvalidStatus);
             };
-
-            outputs = outputs_;
 
             inputs.push(input);
         }
 
-        let hash = self
-            .utxo_contract
-            .transfer(inputs, outputs)
-            .await
-            .map_err(|e| Error::Transfer(e.to_string()))?;
-
-        for participant_id in room.participants {
-            self.storage
-                .update_participant_round(&participant_id, ShuffleRound::Finish(hash))
-                .await
-                .map_err(|e| Error::Storage(e.into()))?;
-        }
-
-        // tx.commit().await.map_err(|e| Error::Storage(e.into()))?;
-
-        Ok(hash)
+        Ok(Some((outputs, inputs)))
     }
 
-    async fn participant_by_id(storage: &S, participant_id: &U256) -> Result<Participant> {
-        storage
-            .get_participant(participant_id)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?
-            .ok_or(Error::ParticipantNotFound)
+    /// Get participant by id.
+    pub async fn get_participant(&self, participant_id: &U256) -> Option<Participant> {
+        self.storage.participants().get(*participant_id).await
     }
 
-    pub async fn get_participant(&self, participant_id: &U256) -> Result<Participant> {
-        Self::participant_by_id(&self.storage, participant_id).await
+    /// Get room by id.
+    pub async fn get_room(&self, room_id: &uuid::Uuid) -> Option<Room> {
+        self.storage.rooms().get(*room_id).await
     }
 
-    async fn room_by_id(storage: &S, room_id: &uuid::Uuid) -> Result<Room> {
-        storage
-            .get_room(room_id)
-            .await
-            .map_err(|e| Error::Storage(e.into()))?
-            .ok_or(Error::RoomNotFound)
+    /// Clear room and participants from the storage.
+    pub async fn clear_room(&self, room_id: &uuid::Uuid) {
+        self.storage.clear_room(room_id).await;
     }
+}
 
-    pub async fn get_room(&self, room_id: &uuid::Uuid) -> Result<Room> {
-        Self::room_by_id(&self.storage, room_id).await
-    }
-
-    async fn room_and_participant(
-        storage: &S,
-        participant_id: &U256,
-    ) -> Result<(Room, Participant)> {
-        let participant = Self::participant_by_id(storage, participant_id).await?;
-
-        let room_id = participant.room_id.ok_or(Error::ParticipantNotInRoom)?;
-
-        let room = Self::room_by_id(storage, &room_id).await?;
-
-        Ok((room, participant))
-    }
-
-    fn participant_position(room: &Room, participant_id: &U256) -> Result<usize> {
-        room.participants
-            .iter()
-            .position(|id| id == participant_id)
-            .ok_or(Error::ParticipantNotInRoom)
-    }
-
-    /// check that all participants in the room passed signed inputs with outputs
-    pub async fn is_signature_passed(&self, room_id: &uuid::Uuid) -> Result<bool> {
-        // let tx = self.storage.begin().await?;
-
-        let room = Self::room_by_id(&self.storage, room_id).await?;
-
-        if room.current_round != room.participants.len() {
-            return Ok(false);
-        }
-
-        for participant_id in room.participants.iter() {
-            let participant = Self::participant_by_id(&self.storage, participant_id).await?;
-
-            let ShuffleRound::SigningOutput(..) = participant.status else {
-                return Ok(false);
-            };
-        }
-
-        Ok(true)
-    }
+/// Result of the `pass_decoded_outputs` method.
+pub enum PassDecodedOutputsResult {
+    /// All participants decoded their outputs, so the next step is to sign them.
+    Finished(Vec<Output>),
+    /// Not all participants decoded their outputs, so the next step is to shuffle outputs.
+    Round(usize),
 }
