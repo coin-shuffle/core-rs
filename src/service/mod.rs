@@ -282,7 +282,7 @@ impl Service {
         signature: Signature,
     ) -> ServiceResult<Option<(Vec<Output>, Vec<Input>)>> {
         let room = self.room_by_id(room_id).await?;
-        let position = Self::participant_position(&room, participant_id)?;
+        let _position = Self::participant_position(&room, participant_id)?;
 
         let RoomState::Signatures((outputs, mut passed)) = room.state else {
             return Err(Error::InvalidStatus);
