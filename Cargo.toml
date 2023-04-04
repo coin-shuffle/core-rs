@@ -1,0 +1,42 @@
+[package]
+name = "coin-shuffle-core"
+version = "0.1.0"
+edition = "2021"
+
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+
+[features]
+default = ["all"]
+all     = ["serde", "service", "node"]
+service = ["tokio/rt"]
+node    = []
+serde   = ["dep:serde", "uuid/serde", "rsa/serde"]
+
+[dependencies]
+rsa         = { version = "0.8.1"  }
+rand        = { version = "0.8.5",   features = ["getrandom"] }
+async-trait = { version = "0.1.64" }
+uuid        = { version = "1.3.0",   features = ["v4", "fast-rng"] }
+thiserror   = { version = "1.0.38" }
+log = "0.4.17"
+ethers-core = { version = "2" }
+ethers-signers = { version = "2" }
+
+[dependencies.tokio]
+version = "1.25"
+default-features = false
+features = ["sync"]
+
+[dependencies.serde]
+version = "1.0.124"
+features = ["derive"]
+optional = true
+
+[dependencies.coin-shuffle-contracts-bindings]
+git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
+tag = "v0.1.0-alpha"
+
+[dev-dependencies]
+tokio = { version = "1.25", features = ["test-util", "macros"] }
+lazy_static = "1.4.0"
