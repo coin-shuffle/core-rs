@@ -35,7 +35,7 @@ optional = true
 
 [dependencies.coin-shuffle-contracts-bindings]
 git = "ssh://git@github.com/coin-shuffle/contracts-bindings.git"
-branch = "develop"
+tag = "v0.1.0-alpha"
 
 [dev-dependencies]
 tokio = { version = "1.25", features = ["test-util", "macros"] }
