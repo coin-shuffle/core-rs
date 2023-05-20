@@ -1,7 +1,6 @@
-use ethers_core::types::{Address, Signature, U256};
+use ethers_core::types::{Address, U256};
 use rsa::RsaPublicKey;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Room {
     pub id: uuid::Uuid,
@@ -23,7 +22,6 @@ impl Room {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum ShuffleStatus {
@@ -34,7 +32,6 @@ pub enum ShuffleStatus {
     TxHashDistribution,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Participant {
     pub id: uuid::Uuid,
@@ -56,16 +53,5 @@ impl Participant {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug)]
-pub struct Input {
-    pub id: U256,
-    pub signature: Signature,
-}
-
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
-pub struct Output {
-    pub amount: U256,
-    pub owner: Address,
-}
+///! Just an alias for easier refactoring in future
+pub type EncodedOutput = Vec<u8>;

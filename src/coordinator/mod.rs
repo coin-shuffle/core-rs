@@ -4,32 +4,33 @@ pub mod types;
 
 use std::collections::{BTreeSet, HashMap};
 
-use crate::service::types::RoomState;
-use coin_shuffle_contracts_bindings::utxo::types::{Input, Output};
+use coin_shuffle_contracts_bindings::shared_types::{Input, Output};
 use ethers_core::abi::ethereum_types::Signature;
 use ethers_core::types::{Address, Bytes, U256};
 use rsa::RsaPublicKey;
 
-use self::types::{EncodedOutput, Participant, ParticipantState, Room};
-use self::{error::Error, storage::inmemory};
+use self::types::RoomState;
+use self::types::{Participant, ParticipantState, Room};
+use self::{error::Error, storage::memory};
+use crate::types::EncodedOutput;
 
-pub type ServiceResult<T> = std::result::Result<T, Error>;
+pub type CoordinatorResult<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
-pub struct Service {
-    storage: inmemory::ServiceStorage,
+pub struct Coordinator {
+    storage: memory::CoordinatorStorage,
 }
 
-impl Default for Service {
+impl Default for Coordinator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Service {
+impl Coordinator {
     pub fn new() -> Self {
         Self {
-            storage: inmemory::ServiceStorage::new(),
+            storage: memory::CoordinatorStorage::new(),
         }
     }
 
@@ -57,7 +58,7 @@ impl Service {
         &self,
         participant_id: &U256,
         rsa_pubkey: RsaPublicKey,
-    ) -> ServiceResult<Option<HashMap<U256, Vec<RsaPublicKey>>>> {
+    ) -> CoordinatorResult<Option<HashMap<U256, Vec<RsaPublicKey>>>> {
         let participant = self.participant_by_id(participant_id).await?;
 
         let room = self.room_by_id(&participant.room_id).await?;
@@ -99,7 +100,7 @@ impl Service {
         self.storage.rooms().update_state(*room_id, state).await;
     }
 
-    async fn room_by_id(&self, room_id: &uuid::Uuid) -> ServiceResult<Room> {
+    async fn room_by_id(&self, room_id: &uuid::Uuid) -> CoordinatorResult<Room> {
         self.storage
             .rooms()
             .get(*room_id)
@@ -107,7 +108,7 @@ impl Service {
             .ok_or(Error::RoomNotFound)
     }
 
-    async fn participant_by_id(&self, participant_id: &U256) -> ServiceResult<Participant> {
+    async fn participant_by_id(&self, participant_id: &U256) -> CoordinatorResult<Participant> {
         self.storage
             .participants()
             .get(*participant_id)
@@ -119,7 +120,7 @@ impl Service {
     async fn distribute_keys(
         &self,
         participants: Vec<U256>,
-    ) -> ServiceResult<HashMap<U256, Vec<RsaPublicKey>>> {
+    ) -> CoordinatorResult<HashMap<U256, Vec<RsaPublicKey>>> {
         let participants_keys = self
             .storage
             .participants()
@@ -132,7 +133,7 @@ impl Service {
                 };
                 Ok((p.utxo_id, key))
             })
-            .collect::<ServiceResult<HashMap<U256, RsaPublicKey>>>()?;
+            .collect::<CoordinatorResult<HashMap<U256, RsaPublicKey>>>()?;
 
         let mut keys = HashMap::new();
 
@@ -151,7 +152,7 @@ impl Service {
                         .cloned()
                         .ok_or(Error::ParticipantNotFound)
                 })
-                .collect::<ServiceResult<Vec<RsaPublicKey>>>()?;
+                .collect::<CoordinatorResult<Vec<RsaPublicKey>>>()?;
 
             keys.insert(*utxo_id, keys_for_participant);
         }
@@ -163,7 +164,7 @@ impl Service {
     pub async fn encoded_outputs(
         &self,
         participant_id: &U256,
-    ) -> ServiceResult<Vec<EncodedOutput>> {
+    ) -> CoordinatorResult<Vec<EncodedOutput>> {
         let participant = self.participant_by_id(participant_id).await?;
         let room = self.room_by_id(&participant.room_id).await?;
 
@@ -188,7 +189,7 @@ impl Service {
     }
 
     /// Return position of the participant in the room.
-    fn participant_position(room: &Room, participant_id: &U256) -> ServiceResult<usize> {
+    fn participant_position(room: &Room, participant_id: &U256) -> CoordinatorResult<usize> {
         room.participants
             .iter()
             .position(|id| id == participant_id)
@@ -204,7 +205,7 @@ impl Service {
         &self,
         participant_id: &U256,
         decoded_outputs: Vec<EncodedOutput>,
-    ) -> ServiceResult<PassDecodedOutputsResult> {
+    ) -> CoordinatorResult<PassDecodedOutputsResult> {
         let participant = self.participant_by_id(participant_id).await?;
         let room = self.room_by_id(&participant.room_id).await?;
 
@@ -264,7 +265,7 @@ impl Service {
     }
 
     /// Return outputs that given room should sign.
-    pub async fn outputs_to_sign(&self, room_id: &uuid::Uuid) -> ServiceResult<Vec<Output>> {
+    pub async fn outputs_to_sign(&self, room_id: &uuid::Uuid) -> CoordinatorResult<Vec<Output>> {
         let room = self.room_by_id(room_id).await?;
         let RoomState::Signatures((outputs, _)) = room.state else {
             return Err(Error::InvalidStatus);
@@ -280,7 +281,7 @@ impl Service {
         room_id: &uuid::Uuid,
         participant_id: &U256,
         signature: Signature,
-    ) -> ServiceResult<Option<(Vec<Output>, Vec<Input>)>> {
+    ) -> CoordinatorResult<Option<(Vec<Output>, Vec<Input>)>> {
         let room = self.room_by_id(room_id).await?;
         let _position = Self::participant_position(&room, participant_id)?;
 

@@ -1,12 +1,11 @@
 use std::collections::BTreeSet;
 
-use coin_shuffle_contracts_bindings::utxo::types::Output;
+use coin_shuffle_contracts_bindings::shared_types::Output;
 use ethers_core::{
     abi::Hash,
     types::{Address, U256},
 };
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     /// None of the users are connected to the room.
@@ -23,7 +22,6 @@ pub enum State {
     TransactionHash(Hash),
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Room {
     pub id: uuid::Uuid,

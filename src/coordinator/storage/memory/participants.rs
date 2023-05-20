@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use ethers_core::types::U256;
 use tokio::sync::Mutex;
 
-use crate::service::types::{Participant, ParticipantState};
+use crate::coordinator::types::{Participant, ParticipantState};
 
 /// `ParticipantsStorage` - provides inmemory storage for [`Participant`] entities.
 #[derive(Clone)]
