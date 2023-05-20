@@ -1,4 +1,4 @@
-pub mod error;
+pub mod errors;
 mod storage;
 pub mod types;
 
@@ -11,7 +11,7 @@ use rsa::RsaPublicKey;
 
 use self::types::RoomState;
 use self::types::{Participant, ParticipantState, Room};
-use self::{error::Error, storage::memory};
+use self::{errors::Error, storage::memory};
 use crate::types::EncodedOutput;
 
 pub type CoordinatorResult<T> = std::result::Result<T, Error>;

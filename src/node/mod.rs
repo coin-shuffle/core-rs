@@ -1,35 +1,15 @@
 use coin_shuffle_contracts_bindings::shared_types::Utxo;
 use ethers_core::types::U256;
 
+use self::errors::Error;
 use self::room::Room;
-use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
+use crate::rsa::{EncryptionResult, Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use crate::types::EncodedOutput;
 use crate::{node::storage::memory, rsa};
 
+pub mod errors;
 pub mod room;
 pub mod storage;
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("utxo doesn't exist id: {0}")]
-    UtxoDoesntExist(U256),
-    #[error("Storage error: {0}")]
-    Storage(#[from] storage::memory::Error),
-    #[error("invalid owner: {0}")]
-    InvalidOwner(String),
-    #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
-    RoomDoesntExist(U256),
-    #[error("failed to decode by chunks: {0}")]
-    DecodeByChunks(RSAError),
-    #[error("failed to encode by chunks: {0}")]
-    EncodeByChunks(RSAError),
-}
-
-#[derive(Debug, Clone)]
-pub struct ShuffleRoundResult {
-    pub outputs: Vec<Vec<u8>>,
-    pub nonce: Vec<u8>,
-}
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -86,8 +66,6 @@ impl Node {
     ) -> Result<Vec<EncodedOutput>, Error> {
         // TODO(OmegaTymbJIep): validate encoded outputs size
 
-        let mut result_outputs = Vec::<EncodedOutput>::default();
-
         let room = self
             .room_storage
             .get(&utxo_id)
@@ -97,26 +75,28 @@ impl Node {
         // room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
         self.room_storage.update(&room.clone()).await?;
 
-        for encoded_output in encoded_outputs {
-            result_outputs.push(
-                rsa::decode_by_chunks(encoded_output, room.clone().rsa_private_key)
-                    .map_err(Error::DecodeByChunks)?,
-            );
-        }
+        // Decode outputs of other participants.
+        let mut outputs = encoded_outputs
+            .into_iter()
+            .map(|encoded_output| rsa::decode_by_chunks(encoded_output, &room.rsa_private_key))
+            .collect::<Result<Vec<Vec<u8>>, RSAError>>()
+            .map_err(Error::DecodeByChunks)?;
 
-        let mut nonce = Vec::<u8>::new();
+        // Add encoded output of current participant.
+        let mut last_nonce = Vec::<u8>::new();
         let mut encoded_self_output = room.output;
+
         for public_key in room.public_keys {
-            let encoding_result =
-                rsa::encode_by_chunks(encoded_self_output.clone(), public_key, nonce.clone())
+            let EncryptionResult { nonce, encoded_msg } =
+                rsa::encode_by_chunks(encoded_self_output.clone(), public_key, last_nonce.clone())
                     .map_err(Error::EncodeByChunks)?;
 
-            nonce = encoding_result.nonce;
-            encoded_self_output = encoding_result.encoded_msg;
+            last_nonce = nonce;
+            encoded_self_output = encoded_msg;
         }
 
-        result_outputs.push(encoded_self_output);
+        outputs.push(encoded_self_output);
 
-        Ok(result_outputs)
+        Ok(outputs)
     }
 }

@@ -57,7 +57,7 @@ pub fn encode_by_chunks(
     Ok(result.clone())
 }
 
-pub fn decode_by_chunks(msg: Vec<u8>, private_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
+pub fn decode_by_chunks(msg: Vec<u8>, private_key: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
     let mut msg_buffer = msg;
     let mut decrypted_msg: Vec<u8> = Vec::new();
 
@@ -137,7 +137,7 @@ mod tests {
 
         let encode_result =
             encode_by_chunks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
-        let decode_result = decode_by_chunks(encode_result.encoded_msg, private_key).unwrap();
+        let decode_result = decode_by_chunks(encode_result.encoded_msg, &private_key).unwrap();
 
         assert_eq!(
             decode_result,
