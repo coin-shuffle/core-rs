@@ -4,7 +4,7 @@ use ethers_core::types::U256;
 use self::room::Room;
 use crate::rsa::{Error as RSAError, RsaPrivateKey, RsaPublicKey};
 use crate::types::EncodedOutput;
-use crate::{node::storage::memory::RoomStorage, rsa};
+use crate::{node::storage::memory, rsa};
 
 pub mod room;
 pub mod storage;
@@ -33,15 +33,18 @@ pub struct ShuffleRoundResult {
 
 #[derive(Debug, Clone)]
 pub struct Node {
-    room_storage: RoomStorage,
+    room_storage: memory::RoomStorage,
 }
 
 impl Node {
-    pub fn new(room_storage: RoomStorage) -> Self {
-        Self { room_storage }
+    pub fn new() -> Self {
+        Self {
+            room_storage: memory::RoomStorage::new(),
+        }
     }
 
-    pub async fn init_room(
+    /// Initiate new **shuffle** process with specified UTXO.
+    pub async fn add_session(
         &mut self,
         utxo: Utxo,
         output: Vec<u8>,
@@ -54,10 +57,13 @@ impl Node {
         Ok(room)
     }
 
-    pub async fn update_shuffle_info(
+    /// Add keys of other participants to the **shuffle** process.
+    ///
+    /// They will be used to encrypt the output of the current participant.
+    pub async fn add_participants_keys(
         &mut self,
-        public_keys: Vec<RsaPublicKey>,
         utxo_id: U256,
+        public_keys: Vec<RsaPublicKey>,
     ) -> Result<(), Error> {
         if let Some(mut room_inner) = self.room_storage.get(&utxo_id).await {
             room_inner.public_keys = public_keys;
@@ -68,24 +74,27 @@ impl Node {
         Ok(())
     }
 
+    /// Perform **shuffle** round.
+    ///
+    /// Receive encoded outputs from previous participants, decode them with RSA
+    /// private key and of current participant and encode them with RSA public keys
+    /// of next participants.
     pub async fn shuffle_round(
         &mut self,
         encoded_outputs: Vec<EncodedOutput>,
         utxo_id: U256,
     ) -> Result<Vec<EncodedOutput>, Error> {
-        //
-        // TODO: validate encoded outputs size
-        //
+        // TODO(OmegaTymbJIep): validate encoded outputs size
 
         let mut result_outputs = Vec::<EncodedOutput>::default();
 
-        let mut room = self
+        let room = self
             .room_storage
             .get(&utxo_id)
             .await
             .ok_or(Error::RoomDoesntExist(utxo_id))?;
 
-        room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
+        // room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
         self.room_storage.update(&room.clone()).await?;
 
         for encoded_output in encoded_outputs {
