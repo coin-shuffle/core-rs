@@ -1,5 +1,5 @@
 pub mod error;
-pub mod storage;
+mod storage;
 pub mod types;
 
 use std::collections::{BTreeSet, HashMap};
@@ -16,6 +16,7 @@ use crate::types::EncodedOutput;
 
 pub type CoordinatorResult<T> = std::result::Result<T, Error>;
 
+/// Implementation of the coordinator that stores all the data in memory.
 #[derive(Clone)]
 pub struct Coordinator {
     storage: memory::CoordinatorStorage,
@@ -34,8 +35,8 @@ impl Coordinator {
         }
     }
 
-    /// Create room with given participants, where each participant is represented by his UTXO id,
-    /// and return room.
+    /// Create room with given participants, where each participant is
+    /// represented by his UTXO id, and return room.
     pub async fn create_room(&self, token: Address, amount: U256, participants: Vec<U256>) -> Room {
         let room = Room::new(token, amount, participants);
 
@@ -51,9 +52,10 @@ impl Coordinator {
         room
     }
 
-    /// Connect participant to the room with passed RSA public key. If all participants are connected,
-    /// then start the shuffling process and return the keys that are needed to decrypt and encrypt
-    /// the message for given room and participant.
+    /// Connect participant to the room with passed RSA public key. If all
+    /// participants are connected, then start the shuffling process and return
+    /// the keys that are needed to decrypt and encrypt the message for given
+    /// room and participant.
     pub async fn connect_participant(
         &self,
         participant_id: &U256,
@@ -63,7 +65,10 @@ impl Coordinator {
 
         let room = self.room_by_id(&participant.room_id).await?;
         if !room.participants.contains(participant_id) {
-            return Err(Error::ParticipantNotInRoom);
+            return Err(Error::ParticipantNotInRoom {
+                participant: *participant_id,
+                room: room.id,
+            });
         }
 
         self.update_participant_state(participant_id, ParticipantState::Start(rsa_pubkey))
@@ -79,7 +84,12 @@ impl Coordinator {
                 keys.insert(*participant_id);
                 keys
             }
-            _ => return Err(Error::InvalidStatus),
+            _ => {
+                return Err(Error::InvalidRoomState {
+                    room: room.id,
+                    state: room.state,
+                })
+            }
         };
 
         if connected.len() == room.participants.len() {
@@ -105,7 +115,7 @@ impl Coordinator {
             .rooms()
             .get(*room_id)
             .await
-            .ok_or(Error::RoomNotFound)
+            .ok_or_else(|| Error::RoomNotFound { room_id: *room_id })
     }
 
     async fn participant_by_id(&self, participant_id: &U256) -> CoordinatorResult<Participant> {
@@ -113,7 +123,7 @@ impl Coordinator {
             .participants()
             .get(*participant_id)
             .await
-            .ok_or(Error::ParticipantNotFound)
+            .ok_or(Error::ParticipantNotFound(*participant_id))
     }
 
     /// Return a map of RSA public keys for each participant in the room.
@@ -129,7 +139,10 @@ impl Coordinator {
             .into_iter()
             .map(|p| {
                 let ParticipantState::Start(key) = p.state else {
-                    return Err(Error::InvalidStatus);
+                    return Err(Error::InvalidParticipantState {
+                        participant: p.utxo_id,
+                        state: p.state,
+                    });
                 };
                 Ok((p.utxo_id, key))
             })
@@ -150,7 +163,7 @@ impl Coordinator {
                     participants_keys
                         .get(utxo_id)
                         .cloned()
-                        .ok_or(Error::ParticipantNotFound)
+                        .ok_or(Error::ParticipantNotFound(*utxo_id))
                 })
                 .collect::<CoordinatorResult<Vec<RsaPublicKey>>>()?;
 
@@ -177,12 +190,15 @@ impl Coordinator {
         let previous_participant_id = room
             .participants
             .get(position - 1)
-            .ok_or(Error::InvalidRound)?;
+            .ok_or_else(|| Error::InvalidRound(position))?;
         let previous_participant = self.participant_by_id(previous_participant_id).await?;
 
         // Get decoded outputs of previous participant and send them to the current one
         let ParticipantState::DecodedOutputs(encoded_outputs) = previous_participant.state else {
-            return Err(Error::InvalidRound);
+            return Err(Error::InvalidParticipantState {
+                participant: previous_participant.utxo_id,
+                state: previous_participant.state,
+            });
         };
 
         Ok(encoded_outputs)
@@ -193,14 +209,15 @@ impl Coordinator {
         room.participants
             .iter()
             .position(|id| id == participant_id)
-            .ok_or(Error::ParticipantNotFound)
+            .ok_or(Error::ParticipantNotFound(*participant_id))
     }
 
     /// Path decoded by participant outputs and store them in the storage.
     ///
-    /// If participant is the last one in the room, then return [`PassDecodedOutputsResult::Finished`].
-    /// Otherwise, return [`PassDecodedOutputsResult::Round`] with position of the next participant in
-    /// the room.
+    /// If participant is the last one in the room, then return
+    /// [`PassDecodedOutputsResult::Finished`]. Otherwise, return
+    /// [`PassDecodedOutputsResult::Round`] with position of the next
+    /// participant in the room.
     pub async fn pass_decoded_outputs(
         &self,
         participant_id: &U256,
@@ -211,10 +228,13 @@ impl Coordinator {
 
         let position = Self::participant_position(&room, participant_id)?;
         let RoomState::Shuffle(current_round) = room.state else {
-            return Err(Error::InvalidRound);
+            return Err(Error::InvalidRoomState {
+                room: room.id,
+                state: room.state,
+            });
         };
         if position != current_round {
-            return Err(Error::InvalidRound);
+            return Err(Error::InvalidRound(position));
         }
         if decoded_outputs.len() != (position + 1) {
             return Err(Error::InvalidNumberOfOutputs);
@@ -222,7 +242,10 @@ impl Coordinator {
 
         // check that previous status is Start
         let ParticipantState::Start(_) = participant.state else {
-            return Err(Error::InvalidStatus);
+            return Err(Error::InvalidParticipantState {
+                participant: *participant_id,
+                state: participant.state,
+            });
         };
 
         // If participant is the last one in the room, then his outputs are output addresses
@@ -268,7 +291,10 @@ impl Coordinator {
     pub async fn outputs_to_sign(&self, room_id: &uuid::Uuid) -> CoordinatorResult<Vec<Output>> {
         let room = self.room_by_id(room_id).await?;
         let RoomState::Signatures((outputs, _)) = room.state else {
-            return Err(Error::InvalidStatus);
+            return Err(Error::InvalidRoomState {
+                room: *room_id,
+                state: room.state,
+            });
         };
         Ok(outputs)
     }
@@ -286,15 +312,21 @@ impl Coordinator {
         let _position = Self::participant_position(&room, participant_id)?;
 
         let RoomState::Signatures((outputs, mut passed)) = room.state else {
-            return Err(Error::InvalidStatus);
+            return Err(Error::InvalidRoomState {
+                room: *room_id,
+                state: room.state,
+            });
         };
 
-        // TODO: validate signature here
+        // TODO(Velnbur): validate signature here
 
         let participant = self.participant_by_id(participant_id).await?;
         // check that previous status is Start
         let ParticipantState::DecodedOutputs(_) = participant.state else {
-            return Err(Error::InvalidStatus);
+            return Err(Error::InvalidParticipantState {
+                participant: *participant_id,
+                state: participant.state,
+            });
         };
         passed.push(*participant_id);
 
@@ -319,7 +351,10 @@ impl Coordinator {
         for participant_id in room.participants {
             let participant = self.participant_by_id(&participant_id).await?;
             let ParticipantState::SigningOutput(input) = participant.state else {
-                return Err(Error::InvalidStatus);
+                return Err(Error::InvalidParticipantState {
+                    participant: participant_id,
+                    state: participant.state,
+                });
             };
 
             inputs.push(input);
