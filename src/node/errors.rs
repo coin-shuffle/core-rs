@@ -1,7 +1,7 @@
 use ethers_core::types::U256;
 
 use crate::node::storage;
-use crate::rsa::RSAError;
+use crate::rsa;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -14,7 +14,7 @@ pub enum Error {
     #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
     RoomDoesntExist(U256),
     #[error("failed to decode by chunks: {0}")]
-    DecodeByChunks(RSAError),
+    DecodeByChunks(rsa::Error),
     #[error("failed to encode by chunks: {0}")]
-    EncodeByChunks(RSAError),
+    EncodeByChunks(rsa::Error),
 }
