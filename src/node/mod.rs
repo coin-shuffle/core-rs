@@ -16,6 +16,12 @@ pub struct Node {
     room_storage: memory::RoomStorage,
 }
 
+impl Default for Node {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Node {
     pub fn new() -> Self {
         Self {

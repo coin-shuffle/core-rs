@@ -115,7 +115,7 @@ impl Coordinator {
             .rooms()
             .get(*room_id)
             .await
-            .ok_or_else(|| Error::RoomNotFound { room_id: *room_id })
+            .ok_or(Error::RoomNotFound { room_id: *room_id })
     }
 
     async fn participant_by_id(&self, participant_id: &U256) -> CoordinatorResult<Participant> {

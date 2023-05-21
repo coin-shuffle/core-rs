@@ -165,20 +165,18 @@ mod tests {
 
         let encode_result2 = encode_by_chunks(
             encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
+            pub_key,
             encode_result1.nonce.clone(),
         )
         .unwrap();
 
         assert_eq!(
-            encode_result1.encoded_msg.clone(),
-            encode_result2.encoded_msg.clone(),
+            encode_result1.encoded_msg, encode_result2.encoded_msg,
             "encoded messages with the same nonce aren't the same"
         );
 
         assert_eq!(
-            encode_result1.nonce.clone(),
-            encode_result2.nonce.clone(),
+            encode_result1.nonce, encode_result2.nonce,
             "nonces are different"
         );
     }
@@ -200,16 +198,11 @@ mod tests {
         )
         .unwrap();
 
-        let encode_result2 = encode_by_chunks(
-            encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
-            Vec::new(),
-        )
-        .unwrap();
+        let encode_result2 =
+            encode_by_chunks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
 
         assert_ne!(
-            encode_result1.encoded_msg,
-            encode_result2.encoded_msg.clone(),
+            encode_result1.encoded_msg, encode_result2.encoded_msg,
             "encoded messages without the same nonces are the same"
         );
 
