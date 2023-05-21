@@ -3,7 +3,7 @@ use ethers_core::types::U256;
 use rsa::RsaPublicKey;
 use uuid::Uuid;
 
-use crate::types::EncodedOutput;
+use crate::types::EncryptedOutput;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
@@ -13,7 +13,7 @@ pub enum State {
     /// keys, that are required for shuffle process.
     Start(RsaPublicKey),
     /// Decoded by participant outputs.
-    DecodedOutputs(Vec<EncodedOutput>),
+    DecryptedOutputs(Vec<EncryptedOutput>),
     /// Participant signs the decoded outputs and his input
     SigningOutput(Input),
     /// Participant finished the process of shuffle

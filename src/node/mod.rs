@@ -4,7 +4,7 @@ use ethers_core::types::U256;
 use self::errors::Error;
 use self::room::Room;
 use crate::rsa::{EncryptionResult, Error as RSAError, RsaPrivateKey, RsaPublicKey};
-use crate::types::EncodedOutput;
+use crate::types::EncryptedOutput;
 use crate::{node::storage::memory, rsa};
 
 pub mod errors;
@@ -62,14 +62,14 @@ impl Node {
 
     /// Perform **shuffle** round.
     ///
-    /// Receive encoded outputs from previous participants, decode them with RSA
-    /// private key and of current participant and encode them with RSA public keys
-    /// of next participants.
+    /// Receive encrypted outputs from previous participants, decrypt them with
+    /// RSA private key and of current participant and encrypt them with RSA
+    /// public keys of next participants.
     pub async fn shuffle_round(
         &mut self,
-        encoded_outputs: Vec<EncodedOutput>,
+        encrypted_outputs: Vec<EncryptedOutput>,
         utxo_id: U256,
-    ) -> Result<Vec<EncodedOutput>, Error> {
+    ) -> Result<Vec<EncryptedOutput>, Error> {
         // TODO(OmegaTymbJIep): validate encoded outputs size
 
         let room = self
@@ -81,21 +81,21 @@ impl Node {
         // room.participants_number = encoded_outputs.len() + room.public_keys.len() + 1;
         self.room_storage.update(&room.clone()).await?;
 
-        // Decode outputs of other participants.
-        let mut outputs = encoded_outputs
+        // Decrypt outputs of other participants.
+        let mut outputs = encrypted_outputs
             .into_iter()
-            .map(|encoded_output| rsa::decode_by_chunks(encoded_output, &room.rsa_private_key))
+            .map(|o| rsa::decode_by_chunks(o, &room.rsa_private_key))
             .collect::<Result<Vec<Vec<u8>>, RSAError>>()
-            .map_err(Error::DecodeByChunks)?;
+            .map_err(Error::DecryptByChunks)?;
 
-        // Add encoded output of current participant.
+        // Add encrypted output of current participant.
         let mut last_nonce = Vec::<u8>::new();
         let mut encoded_self_output = room.output;
 
         for public_key in room.public_keys {
             let EncryptionResult { nonce, encoded_msg } =
                 rsa::encode_by_chunks(encoded_self_output.clone(), public_key, last_nonce.clone())
-                    .map_err(Error::EncodeByChunks)?;
+                    .map_err(Error::EncryptByChunks)?;
 
             last_nonce = nonce;
             encoded_self_output = encoded_msg;

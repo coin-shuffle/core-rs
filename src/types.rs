@@ -1,2 +1,2 @@
 ///! Just an alias for easier refactoring in future
-pub type EncodedOutput = Vec<u8>;
+pub type EncryptedOutput = Vec<u8>;

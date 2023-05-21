@@ -12,7 +12,7 @@ use rsa::RsaPublicKey;
 use self::types::RoomState;
 use self::types::{Participant, ParticipantState, Room};
 use self::{errors::Error, storage::memory};
-use crate::types::EncodedOutput;
+use crate::types::EncryptedOutput;
 
 pub type CoordinatorResult<T> = std::result::Result<T, Error>;
 
@@ -174,10 +174,10 @@ impl Coordinator {
     }
 
     /// Return outputs that given participant should decrypt.
-    pub async fn encoded_outputs(
+    pub async fn encrypted_outputs(
         &self,
         participant_id: &U256,
-    ) -> CoordinatorResult<Vec<EncodedOutput>> {
+    ) -> CoordinatorResult<Vec<EncryptedOutput>> {
         let participant = self.participant_by_id(participant_id).await?;
         let room = self.room_by_id(&participant.room_id).await?;
 
@@ -194,14 +194,14 @@ impl Coordinator {
         let previous_participant = self.participant_by_id(previous_participant_id).await?;
 
         // Get decoded outputs of previous participant and send them to the current one
-        let ParticipantState::DecodedOutputs(encoded_outputs) = previous_participant.state else {
+        let ParticipantState::DecryptedOutputs(encrypted_outputs) = previous_participant.state else {
             return Err(Error::InvalidParticipantState {
                 participant: previous_participant.utxo_id,
                 state: previous_participant.state,
             });
         };
 
-        Ok(encoded_outputs)
+        Ok(encrypted_outputs)
     }
 
     /// Return position of the participant in the room.
@@ -218,11 +218,11 @@ impl Coordinator {
     /// [`PassDecodedOutputsResult::Finished`]. Otherwise, return
     /// [`PassDecodedOutputsResult::Round`] with position of the next
     /// participant in the room.
-    pub async fn pass_decoded_outputs(
+    pub async fn pass_decrypted_outputs(
         &self,
         participant_id: &U256,
-        decoded_outputs: Vec<EncodedOutput>,
-    ) -> CoordinatorResult<PassDecodedOutputsResult> {
+        encrypted_outputs: Vec<EncryptedOutput>,
+    ) -> CoordinatorResult<PassDecryptedOutputsResult> {
         let participant = self.participant_by_id(participant_id).await?;
         let room = self.room_by_id(&participant.room_id).await?;
 
@@ -236,7 +236,7 @@ impl Coordinator {
         if position != current_round {
             return Err(Error::InvalidRound(position));
         }
-        if decoded_outputs.len() != (position + 1) {
+        if encrypted_outputs.len() != (position + 1) {
             return Err(Error::InvalidNumberOfOutputs);
         }
 
@@ -250,7 +250,7 @@ impl Coordinator {
 
         // If participant is the last one in the room, then his outputs are output addresses
         let outputs = if position == room.participants.len() - 1 {
-            let outputs = decoded_outputs
+            let outputs = encrypted_outputs
                 .clone()
                 .into_iter()
                 .map(|o| Output {
@@ -263,17 +263,17 @@ impl Coordinator {
                 RoomState::Signatures((outputs.clone(), Vec::new())),
             )
             .await;
-            PassDecodedOutputsResult::Finished(outputs)
+            PassDecryptedOutputsResult::Finished(outputs)
         } else {
             let current_round = current_round + 1;
             self.update_room_state(&room.id, RoomState::Shuffle(current_round))
                 .await;
-            PassDecodedOutputsResult::Round(current_round)
+            PassDecryptedOutputsResult::Round(current_round)
         };
 
         self.update_participant_state(
             participant_id,
-            ParticipantState::DecodedOutputs(decoded_outputs),
+            ParticipantState::DecryptedOutputs(encrypted_outputs),
         )
         .await;
 
@@ -322,7 +322,7 @@ impl Coordinator {
 
         let participant = self.participant_by_id(participant_id).await?;
         // check that previous status is Start
-        let ParticipantState::DecodedOutputs(_) = participant.state else {
+        let ParticipantState::DecryptedOutputs(_) = participant.state else {
             return Err(Error::InvalidParticipantState {
                 participant: *participant_id,
                 state: participant.state,
@@ -380,7 +380,7 @@ impl Coordinator {
 }
 
 /// Result of the `pass_decoded_outputs` method.
-pub enum PassDecodedOutputsResult {
+pub enum PassDecryptedOutputsResult {
     /// All participants decoded their outputs, so the next step is to sign them.
     Finished(Vec<Output>),
     /// Not all participants decoded their outputs, so the next step is to shuffle outputs.

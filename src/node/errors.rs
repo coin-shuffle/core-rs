@@ -13,8 +13,8 @@ pub enum Error {
     InvalidOwner(String),
     #[error("room with specified UTXO doesn't exist utxo_id: {0}")]
     RoomDoesntExist(U256),
-    #[error("failed to decode by chunks: {0}")]
-    DecodeByChunks(rsa::Error),
-    #[error("failed to encode by chunks: {0}")]
-    EncodeByChunks(rsa::Error),
+    #[error("failed to decrypt by chunks: {0}")]
+    DecryptByChunks(rsa::Error),
+    #[error("failed to encrypt by chunks: {0}")]
+    EncryptByChunks(rsa::Error),
 }
