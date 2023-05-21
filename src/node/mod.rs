@@ -1,5 +1,7 @@
 use coin_shuffle_contracts_bindings::shared_types::Utxo;
-use ethers_core::types::U256;
+use ethers_core::abi::{AbiEncode, Hash};
+use ethers_core::types::{Address, U256};
+use ethers_core::utils::keccak256;
 
 use self::errors::Error;
 use self::room::Room;
@@ -105,4 +107,40 @@ impl Node {
 
         Ok(outputs)
     }
+
+    /// Provide message that participant should sign.
+    ///
+    /// # Returns
+    ///
+    /// The result is a hash of concatenated amount of each input and outputs.
+    ///
+    /// As we have only one input and all participants have the same amount in input,
+    /// we could just hash like this:
+    ///
+    /// ```
+    /// room.amount | output1 | room.amount | output2 | ...
+    /// ```
+    pub async fn message_to_sign(
+        &self,
+        utxo_id: U256,
+        outputs: Vec<Address>,
+    ) -> Result<Hash, Error> {
+        let room = self
+            .room_storage
+            .get(&utxo_id)
+            .await
+            .ok_or(Error::RoomDoesntExist(utxo_id))?;
+
+        let mut message = Vec::with_capacity(outputs.len() * (ADDRESS_SIZE + U256_SIZE));
+
+        for output in outputs {
+            message.extend_from_slice(&room.utxo.amount.encode());
+            message.extend_from_slice(&output.as_bytes());
+        }
+
+        Ok(Hash::from(keccak256(message)))
+    }
 }
+
+const ADDRESS_SIZE: usize = 20;
+const U256_SIZE: usize = 32;
