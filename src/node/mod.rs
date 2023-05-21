@@ -117,7 +117,7 @@ impl Node {
     /// As we have only one input and all participants have the same amount in input,
     /// we could just hash like this:
     ///
-    /// ```
+    /// ```ignore
     /// room.amount | output1 | room.amount | output2 | ...
     /// ```
     pub async fn message_to_sign(
