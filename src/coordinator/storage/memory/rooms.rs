@@ -1,10 +1,9 @@
-use crate::service::types::RoomState;
 use std::{collections::HashMap, sync::Arc};
-
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::service::types::Room;
+use crate::coordinator::types::Room;
+use crate::coordinator::types::RoomState;
 
 #[derive(Clone)]
 pub struct RoomsStorage {

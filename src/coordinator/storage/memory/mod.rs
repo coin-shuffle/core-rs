@@ -4,12 +4,12 @@ mod participants;
 mod rooms;
 
 #[derive(Clone)]
-pub struct ServiceStorage {
+pub struct CoordinatorStorage {
     participants: participants::ParticipantsStorage,
     rooms: rooms::RoomsStorage,
 }
 
-impl ServiceStorage {
+impl CoordinatorStorage {
     pub fn new() -> Self {
         Self {
             participants: participants::ParticipantsStorage::new(),
@@ -28,9 +28,7 @@ impl ServiceStorage {
     /// Delete room, participants instances in storage and return deleted participants
     /// UTXO ids
     pub async fn clear_room(&self, room: &uuid::Uuid) -> Vec<U256> {
-        let room = self.rooms.get(*room).await;
-
-        if let Some(room) = room {
+        if let Some(room) = self.rooms.get(*room).await {
             self.rooms.delete(room.id).await;
 
             for participant in room.participants.iter() {
@@ -44,7 +42,7 @@ impl ServiceStorage {
     }
 }
 
-impl Default for ServiceStorage {
+impl Default for CoordinatorStorage {
     fn default() -> Self {
         Self::new()
     }

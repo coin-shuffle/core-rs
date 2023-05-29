@@ -27,9 +27,9 @@ pub struct DecryptionResult {
     pub nonce: Vec<u8>,
 }
 
-pub fn encode_by_chunks(
+pub fn encrypt_by_chunks(
     msg: Vec<u8>,
-    pub_key: RsaPublicKey,
+    pub_key: &RsaPublicKey,
     nonce: Vec<u8>,
 ) -> Result<EncryptionResult, Error> {
     let mut msg_buffer = msg;
@@ -57,7 +57,7 @@ pub fn encode_by_chunks(
     Ok(result.clone())
 }
 
-pub fn decode_by_chunks(msg: Vec<u8>, private_key: RsaPrivateKey) -> Result<Vec<u8>, Error> {
+pub fn decrypt_by_chunks(msg: Vec<u8>, private_key: &RsaPrivateKey) -> Result<Vec<u8>, Error> {
     let mut msg_buffer = msg;
     let mut decrypted_msg: Vec<u8> = Vec::new();
 
@@ -122,7 +122,7 @@ impl<R: CryptoRngCore> RngCore for Noncer<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rsa::{decode_by_chunks, encode_by_chunks};
+    use crate::rsa::{decrypt_by_chunks, encrypt_by_chunkss};
     use rsa::{RsaPrivateKey, RsaPublicKey};
 
     #[tokio::test]
@@ -136,8 +136,8 @@ mod tests {
         let encode_message = "hello world";
 
         let encode_result =
-            encode_by_chunks(encode_message.as_bytes().to_vec(), pub_key, Vec::new()).unwrap();
-        let decode_result = decode_by_chunks(encode_result.encoded_msg, private_key).unwrap();
+            encrypt_by_chunks(encode_message.as_bytes().to_vec(), &pub_key, Vec::new()).unwrap();
+        let decode_result = decrypt_by_chunks(encode_result.encoded_msg, &private_key).unwrap();
 
         assert_eq!(
             decode_result,
@@ -156,29 +156,27 @@ mod tests {
 
         let encode_message = "hello world";
 
-        let encode_result1 = encode_by_chunks(
+        let encode_result1 = encrypt_by_chunks(
             encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
+            &pub_key.clone(),
             Vec::new(),
         )
         .unwrap();
 
-        let encode_result2 = encode_by_chunks(
+        let encode_result2 = encrypt_by_chunks(
             encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
+            &pub_key,
             encode_result1.nonce.clone(),
         )
         .unwrap();
 
         assert_eq!(
-            encode_result1.encoded_msg.clone(),
-            encode_result2.encoded_msg.clone(),
+            encode_result1.encoded_msg, encode_result2.encoded_msg,
             "encoded messages with the same nonce aren't the same"
         );
 
         assert_eq!(
-            encode_result1.nonce.clone(),
-            encode_result2.nonce.clone(),
+            encode_result1.nonce, encode_result2.nonce,
             "nonces are different"
         );
     }
@@ -193,23 +191,14 @@ mod tests {
 
         let encode_message = "hello world";
 
-        let encode_result1 = encode_by_chunks(
-            encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
-            Vec::new(),
-        )
-        .unwrap();
+        let encode_result1 =
+            encrypt_by_chunks(encode_message.as_bytes().to_vec(), &pub_key, Vec::new()).unwrap();
 
-        let encode_result2 = encode_by_chunks(
-            encode_message.as_bytes().to_vec(),
-            pub_key.clone(),
-            Vec::new(),
-        )
-        .unwrap();
+        let encode_result2 =
+            encrypt_by_chunks(encode_message.as_bytes().to_vec(), &pub_key, Vec::new()).unwrap();
 
         assert_ne!(
-            encode_result1.encoded_msg,
-            encode_result2.encoded_msg.clone(),
+            encode_result1.encoded_msg, encode_result2.encoded_msg,
             "encoded messages without the same nonces are the same"
         );
 

@@ -1,11 +1,10 @@
-use coin_shuffle_contracts_bindings::utxo::types::Input;
+use coin_shuffle_contracts_bindings::shared_types::Input;
 use ethers_core::types::U256;
 use rsa::RsaPublicKey;
 use uuid::Uuid;
 
-use super::EncodedOutput;
+use crate::types::EncryptedOutput;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub enum State {
     /// Participant havn't started the process of shuffle, but room is created.
@@ -14,14 +13,13 @@ pub enum State {
     /// keys, that are required for shuffle process.
     Start(RsaPublicKey),
     /// Decoded by participant outputs.
-    DecodedOutputs(Vec<EncodedOutput>),
+    DecryptedOutputs(Vec<EncryptedOutput>),
     /// Participant signs the decoded outputs and his input
     SigningOutput(Input),
     /// Participant finished the process of shuffle
     Finish,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Participant {
     pub room_id: uuid::Uuid,
